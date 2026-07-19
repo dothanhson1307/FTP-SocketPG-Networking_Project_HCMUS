@@ -4,6 +4,7 @@
 #include <sys/socket.h> 
 #include <netinet/in.h> 
 #include <arpa/inet.h>  
+#include <string>
 
 int main() {
     // 1. CREATE SOCKET: Get our integer ticket (client_fd) from the OS
@@ -34,27 +35,50 @@ int main() {
     }
     std::cout << "[Client] Handshake successful! Connected.\n";
 
-    // 4. SEND DATA: Push bytes into the kernel's send buffer
-    const char* message = "Hello Server! This is a test datagram from C++ Client.";
-    size_t message_length = strlen(message); // size_t: Unsigned byte count
-
-    ssize_t bytes_sent = send(client_fd, message, message_length, 0);
-    if (bytes_sent > 0) {
-        std::cout << "[Client] Successfully sent " << bytes_sent << " bytes to server.\n";
-    }
-
-    // 5. RECEIVE REPLY: Wait for the server's echo
+    // 4. INTERACTIVE COMMAND LOOP
+    std::string userInput;
     char buffer[1024];
     size_t buffer_capacity = sizeof(buffer) - 1;
 
-    // Notice we use ssize_t here again to capture positive counts, 0 (EOF), or -1 (error)
-    ssize_t bytes_received = recv(client_fd, buffer, buffer_capacity, 0);
-    if (bytes_received > 0) {
-        buffer[bytes_received] = '\0';
-        std::cout << "[Client] Server replied with: \"" << buffer << "\"\n";
+    std::cout << "[Client] Connected. Commands: USER <username>, PASS <password>, QUIT\n";
+
+    while (true) {
+        std::cout << "ftp> ";
+        std::getline(std::cin, userInput);
+
+        if (userInput.empty()) {
+            continue;
+        }
+
+        // Send user input to server
+        ssize_t bytes_sent = send(client_fd, userInput.c_str(), userInput.length(), 0);
+        if (bytes_sent < 0) {
+            std::cerr << "[Client] Failed to send message to server.\n";
+            break;
+        }
+
+        // Wait for server response
+        memset(buffer, 0, sizeof(buffer));
+        ssize_t bytes_received = recv(client_fd, buffer, buffer_capacity, 0);
+
+        if (bytes_received > 0) {
+            buffer[bytes_received] = '\0';
+            std::cout << buffer; // Note: Server responses already end in \r\n
+        } else if (bytes_received == 0) {
+            std::cout << "[Client] Server closed the connection.\n";
+            break;
+        } else {
+            std::cerr << "[Client] Error receiving data from server.\n";
+            break;
+        }
+
+        // Exit loop if client sent QUIT
+        if (userInput.rfind("QUIT", 0) == 0) {
+            break;
+        }
     }
 
-    // 6. CLOSE SOCKET: Send TCP FIN packet to tell the server we are disconnecting
+    // 5. CLOSE SOCKET: Send TCP FIN packet to tell the server we are disconnecting
     close(client_fd);
     std::cout << "[Client] Disconnected from server. Goodbye.\n";
     return 0;
