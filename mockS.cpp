@@ -9,7 +9,6 @@
 #include <vector>
 #include "User/User.h"
 
-using namespace std;
 
 void sendResponse(int client_fd, const string& response){
     ssize_t signal = send(client_fd, response.c_str(), response.length(), 0);
@@ -27,13 +26,17 @@ void sendPasswordAuthentication(int client_fd){
     sendResponse(client_fd,response);
 }
 
-User* verifyUserName(const std::vector<User*>& vec, const string username){
+User* verifyUserName(const std::vector<User*>& vec, const string& username){
     for(User* user : vec){
         if(user->getUsername() == username){
             return user;
         }
     }
     return nullptr;
+}
+
+bool verifyPassword(User* user,const string& password){
+    return (user->getPassword() == password);
 }
 
 std::pair<string,string> returnResponse(int client_fd, char* buffer, size_t buffer_capacity){
@@ -121,10 +124,14 @@ int main(){
         if(response.first == "USER"){
             User* user = verifyUserName(users_list, response.second);
             if (user != nullptr) {
+                sendResponse(client_fd, "125\n");
                 sendPasswordAuthentication(client_fd);
             } else {
                 sendResponse(client_fd, "530 Invalid username\n");
             }
+        }
+        else if(response.first == "PASSWORD"){
+
         }
         
     }
