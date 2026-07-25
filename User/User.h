@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 using std::string;
 
@@ -12,3 +13,5 @@ class User{
         string getUsername();
         string getPassword();
 };
+
+extern std::vector<User> Accounts;
