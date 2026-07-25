@@ -13,6 +13,7 @@
 #include "ResponseRelated/Authentication/Username.h"
 #include "ResponseRelated/Authentication/Password.h"
 #include "ResponseRelated/FileManipulation/Retrieve.h"
+#include "ResponseRelated/FileManipulation/fileUtilities.h"
 
 int main(){
     std::vector<User*> users_list = {new User("Son","1234"), new User("Kiet","1234")};
@@ -99,7 +100,8 @@ int main(){
         }
         else if (response.first == "UPLOAD") {
             sendResponse(client_fd, "127.0.0.1:8080");
-            upload(response.second);
+            string server_path = "User_uploaded_files/" + getBaseName(response.second);
+            upload(server_path);
         }
         else {
             sendResponse(client_fd, "500 Unknown command\n");

@@ -1,6 +1,7 @@
 #include "ResponseRelated/FileManipulation/Retrieve.h"
 #include "ResponseRelated/FileManipulation/Upload.h"
 #include "ResponseRelated/ResponseHandling/ResponseHandling.h"
+#include "ResponseRelated/FileManipulation/fileUtilities.h"
 #include <cstddef>
 #include <iostream>
 #include <cstring>     
@@ -54,7 +55,8 @@ int main(){
         }
         else if (user_res.first == "RETRIEVE") {
             sendResponse(client_fd, input + "\n");
-            upload("User_downloaded_files/newfile.txt");
+            string user_path = "User_downloaded_files/" + getBaseName(input);
+            upload(user_path);
         }   
         else if (user_res.first == "UPLOAD") {
             sendResponse(client_fd, input + "\n");
@@ -75,6 +77,7 @@ int main(){
                 udp_server.sin_family = AF_INET;
                 udp_server.sin_port = htons(port);
                 inet_pton(AF_INET, ip.c_str(), &udp_server.sin_addr);
+                
                 retrieve(user_res.second, udp_server, sizeof(udp_server));
             }
         }
