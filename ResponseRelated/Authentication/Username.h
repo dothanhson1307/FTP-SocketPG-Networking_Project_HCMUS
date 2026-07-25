@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "../../User/user.h"
+#include "../../User/User.h"
 #include "../ResponseHandling/ResponseHandling.h"
 
 using std::string;

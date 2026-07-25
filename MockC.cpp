@@ -1,3 +1,6 @@
+#include "ResponseRelated/FileManipulation/Retrieve.h"
+#include "ResponseRelated/FileManipulation/Upload.h"
+#include "ResponseRelated/ResponseHandling/ResponseHandling.h"
 #include <cstddef>
 #include <iostream>
 #include <cstring>     
@@ -6,6 +9,8 @@
 #include <netinet/in.h> 
 #include <arpa/inet.h>  
 #include <string>
+
+using std::string;
 
 int main(){
     int client_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -30,21 +35,55 @@ int main(){
     char buffer[1024];
     size_t buffer_capacity = sizeof(buffer) - 1;
 
-    while(true){
-        recv(client_fd,buffer,buffer_capacity,0);
-        std::cout<<buffer;
+    while (true) {
+        memset(buffer, 0, buffer_capacity + 1);
+        ssize_t bytes_recvd = recv(client_fd, buffer, buffer_capacity, 0);
+        if (bytes_recvd <= 0) {
+            std::cout << "[Client] Connection closed.\n";
+            break;
+        }
+        buffer[bytes_recvd] = '\0';
+        std::cout << buffer;
 
-        std::cin.ignore();
-        std::getline(std::cin,input);
-        ssize_t bytes_sent = send(client_fd,input.c_str(),input.length(),0);
+        if (!std::getline(std::cin, input) || input.empty()) continue;
 
-        recv(client_fd,buffer,buffer_capacity,0);
-        std::cout<<buffer;
+        std::pair<string, string> user_res = decoupledResponse(input);
 
-        std::getline(std::cin,input);
-        bytes_sent = send(client_fd,input.c_str(),input.length(),0);
-
-        break;
+        if(user_res.first == "USER" || user_res.first == "PASSWORD"){
+            sendResponse(client_fd,input + "\n");
+        }
+        else if (user_res.first == "RETRIEVE") {
+            sendResponse(client_fd, input + "\n");
+            upload("User_downloaded_files/newfile.txt");
+        }   
+        else if (user_res.first == "UPLOAD") {
+            sendResponse(client_fd, input + "\n");
+            ssize_t addr_bytes = recv(client_fd, buffer, buffer_capacity, 0);
+            if (addr_bytes > 0) {
+                buffer[addr_bytes] = '\0';
+                string server_addr_info = string(buffer);
+                
+                size_t port_pos = server_addr_info.find(':');
+                string ip = "127.0.0.1";
+                int port = 8080;
+                
+                if (port_pos != string::npos) {
+                    ip = server_addr_info.substr(0, port_pos);
+                    port = std::stoi(server_addr_info.substr(port_pos + 1));
+                }
+                sockaddr_in udp_server{};
+                udp_server.sin_family = AF_INET;
+                udp_server.sin_port = htons(port);
+                inet_pton(AF_INET, ip.c_str(), &udp_server.sin_addr);
+                retrieve(user_res.second, udp_server, sizeof(udp_server));
+            }
+        }
+        else {
+            sendResponse(client_fd, input + "\n");
+            if (user_res.first == "QUIT" || input == "Exit") {
+                break;
+            }
+        }
     }
 
     close(client_fd);

@@ -15,10 +15,10 @@
 #include "ResponseRelated/FileManipulation/Retrieve.h"
 
 int main(){
-    std::vector<User*> users_list = {new User("Son","1234"),new User("Kiet","1234")};
+    std::vector<User*> users_list = {new User("Son","1234"), new User("Kiet","1234")};
 
-    int server_fd = socket(AF_INET,SOCK_STREAM,0);
-    if(server_fd==-1){
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1) {
         std::cerr << "kernel can't reserve space for socket\n";
         return 1;
     }
@@ -31,11 +31,10 @@ int main(){
     }
 
     sockaddr_in server_addr{};
-
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(8080);
 
-    if(inet_pton(AF_INET,"127.0.0.1",&server_addr.sin_addr)<=0){
+    if (inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) <= 0) {
         std::cerr << "invalid ip or invalid family address\n";
         close(server_fd);
         return 1;
@@ -47,73 +46,65 @@ int main(){
         return 1;
     }
 
-    listen(server_fd,5);
+    listen(server_fd, 5);
 
     sockaddr_in client_addr{};
     socklen_t client_len = sizeof(client_addr);
 
-    int client_fd = accept(server_fd,reinterpret_cast<sockaddr*>(&client_addr),&client_len);
+    int client_fd = accept(server_fd, reinterpret_cast<sockaddr*>(&client_addr), &client_len);
     if (client_fd == -1) {
         std::cerr << "Accept failed\n";
-        sendResponse(client_fd, "426 connection closed\n");
         close(server_fd);
         return 1;
     }
-    sendResponse(client_fd, "125 connection initiated\n");
+    sendResponse(client_fd, "125 Connection initiated\n");
 
     char buffer[1024];
     size_t buffer_capacity = sizeof(buffer) - 1;
 
-    sendUsernameAuthentication(client_fd);
     User* user = nullptr;
     bool authenticated = false;
 
-    while(true){
-        memset(buffer,0,buffer_capacity + 1);
-        std::pair<string,string> response = returnResponse(client_fd,buffer,buffer_capacity);
+    while (true) {
+        memset(buffer, 0, buffer_capacity + 1);
+        std::pair<string, string> response = returnResponse(client_fd, buffer, buffer_capacity);
 
-        if(response.first == "EOF"){
+        if (response.first == "EOF") {
             std::cout << "Client disconnected.\n";
             close(client_fd);
             break;
         }
-        if(response.first == "USER"){
+
+        if (response.first == "USER") {
             user = verifyUserName(users_list, response.second);
             if (user != nullptr) {
-                sendResponse(client_fd,"331 Username found\n");
-                sendResponse(client_fd,"Please enter the password\n");
-                sendPasswordAuthentication(client_fd);
+                sendResponse(client_fd, "331 Username found. Please enter password (PASSWORD <password>)\n");
             } else {
                 sendResponse(client_fd, "530 Invalid username\n");
             }
-            continue;
         }
-        else if(user == nullptr || !authenticated){
-            sendResponse(client_fd,"530 not logged in\n");
-            sendResponse(client_fd,"Please enter the username\n");
-            continue;
-        }
-        else if(response.first == "PASSWORD"){
-            if(verifyPassword(user,response.second)){
-                sendResponse(client_fd,"230 Logged in sucessfully\n");
+        else if (response.first == "PASSWORD") {
+            if (user != nullptr && verifyPassword(user, response.second)) {
                 authenticated = true;
+                sendResponse(client_fd, "230 Logged in successfully\n");
+            } else {
+                sendResponse(client_fd, "530 Incorrect password. Please try again.\n");
             }
-            else{
-                sendResponse(client_fd,"Please enter the correct password\n");
-                //or have the client change username
-            }
-            continue;
         }
-        else if(response.first == "RETRIEVE"){
-            retrieve(response.second,client_addr,client_len);
+        else if (!authenticated) {
+            sendResponse(client_fd, "530 Not logged in. Please send USER <username> first.\n");
         }
-        else if(response.second == "UPLOAD"){
+        else if (response.first == "RETRIEVE") {
+            retrieve(response.second, client_addr, client_len);
+        }
+        else if (response.first == "UPLOAD") {
+            sendResponse(client_fd, "127.0.0.1:8080");
             upload(response.second);
         }
-        else{
+        else {
             sendResponse(client_fd, "500 Unknown command\n");
         }
-        
     }
+    close(server_fd);
     return 0;
 }

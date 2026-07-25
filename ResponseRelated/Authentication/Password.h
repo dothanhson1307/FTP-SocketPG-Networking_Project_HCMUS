@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include "../../User/user.h"
+#include "../../User/User.h"
 #include "../ResponseHandling/ResponseHandling.h"
 
 using std::string;
