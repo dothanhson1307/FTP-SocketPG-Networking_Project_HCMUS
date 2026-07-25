@@ -10,10 +10,17 @@
 #include <cctype>
 #include <unordered_map>
 
-bool read(const string& s, std::vector<std::vector<string>>& args) {
-    std::stringstream ss(s);
-    string line;
-    while(getline(ss, line)) {
+std::vector<std::vector<string>> read(string& pendingData) {
+    std::vector<std::vector<string>> args;
+    size_t newLinePosition;
+
+    while((newLinePosition = pendingData.find('\n')) != string::npos /*no position*/) {
+        // cho nay xu ly neu user input > 1 command
+        string line = pendingData.substr(0, newLinePosition);
+        pendingData.erase(0, newLinePosition + 1);
+        // +1 la xoa them \n vi getline khong lay \n
+
+
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
@@ -23,7 +30,7 @@ bool read(const string& s, std::vector<std::vector<string>>& args) {
             std::stringstream ss_1(line);
             string tmp;
             
-            // Convert all command at index 0 to uppercase
+            // convert a command at index 0 to uppercase
             if (!(ss_1 >> tmp)) {
                 continue;
             }
@@ -41,7 +48,8 @@ bool read(const string& s, std::vector<std::vector<string>>& args) {
             args.push_back(v);
         }
     }
-    return true;
+
+    return args;
 }
 
 std::unordered_map<string, CommandHandler> router = {

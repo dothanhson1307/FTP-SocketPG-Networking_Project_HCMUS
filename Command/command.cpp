@@ -40,10 +40,10 @@ string handlePass(const std::vector<string>& args, SessionState& session) {
         return "501 Syntax error in parameters or arguments!\r\n";
     }
     
-    if(!session.usernameAccepted) {
-        return "503 bad sequence of commands!\r\n";
+    if(!session.usernameAccepted || session.loggedIn) {
+        return "503 Bad sequence of commands!\r\n";
     }
-    
+
     User target(session.username, args[1]);
     
     if(findUser(target)) {

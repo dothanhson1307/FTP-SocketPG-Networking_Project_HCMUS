@@ -1,6 +1,6 @@
 #pragma once
 
-#include "User/User.h"
+#include "../User/User.h"
 
 #include <functional>
 #include <string>
@@ -18,4 +18,4 @@ struct SessionState {
 // using CommandArguments = std::vector<std::string>;
 using CommandHandler = std::function<std::string(const std::vector<string>&, SessionState&)>;
 
-bool read(const string&, std::vector<std::vector<string>>&);
+std::vector<std::vector<string>> read(string&);
