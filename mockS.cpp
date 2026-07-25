@@ -7,64 +7,12 @@
 #include <arpa/inet.h>  
 #include <string>
 #include <vector>
+#include "ResponseRelated/FileManipulation/Upload.h"
 #include "User/User.h"
-
-
-void sendResponse(int client_fd, const string& response){
-    ssize_t signal = send(client_fd, response.c_str(), response.length(), 0);
-    if(signal > 0) std::cout<<"Sent successfully\n";
-    else std::cerr<<"Failed to send response\n";
-}
-
-void sendUsernameAuthentication(int client_fd){
-    string response = "USER <username>\n";
-    sendResponse(client_fd,response);
-}
-
-void sendPasswordAuthentication(int client_fd){
-    string response = "PASSWORD <password>\n";
-    sendResponse(client_fd,response);
-}
-
-User* verifyUserName(const std::vector<User*>& vec, const string& username){
-    for(User* user : vec){
-        if(user->getUsername() == username){
-            return user;
-        }
-    }
-    return nullptr;
-}
-
-bool verifyPassword(User* user,const string& password){
-    return (user->getPassword() == password);
-}
-
-std::pair<string,string> returnResponse(int client_fd, char* buffer, size_t buffer_capacity){
-
-    string command;
-    string argument;
-
-    ssize_t bytes_received = recv(client_fd, buffer, buffer_capacity, 0);
-
-    if (bytes_received > 0) {
-        buffer[bytes_received] = '\0';
-        string request(buffer);
-        request.erase(request.find_last_not_of("\r\n") + 1);
-        std::cout << "[Server] Received: \"" << request << "\"\n";
-        size_t space_pos = request.find(' ');
-
-        if (space_pos != string::npos) {
-            command = request.substr(0, space_pos);
-            argument = request.substr(space_pos + 1);
-        } else {
-            command = request;
-        }
-    } else {
-        command = "EOF";
-    }
-    return std::pair<string,string>(command,argument);
-}
-
+#include "ResponseRelated/ResponseHandling/ResponseHandling.h"
+#include "ResponseRelated/Authentication/Username.h"
+#include "ResponseRelated/Authentication/Password.h"
+#include "ResponseRelated/FileManipulation/Retrieve.h"
 
 int main(){
     std::vector<User*> users_list = {new User("Son","1234"),new User("Kiet","1234")};
@@ -105,11 +53,20 @@ int main(){
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd = accept(server_fd,reinterpret_cast<sockaddr*>(&client_addr),&client_len);
+    if (client_fd == -1) {
+        std::cerr << "Accept failed\n";
+        sendResponse(client_fd, "426 connection closed\n");
+        close(server_fd);
+        return 1;
+    }
+    sendResponse(client_fd, "125 connection initiated\n");
 
     char buffer[1024];
     size_t buffer_capacity = sizeof(buffer) - 1;
 
     sendUsernameAuthentication(client_fd);
+    User* user = nullptr;
+    bool authenticated = false;
 
     while(true){
         memset(buffer,0,buffer_capacity + 1);
@@ -120,18 +77,41 @@ int main(){
             close(client_fd);
             break;
         }
-
         if(response.first == "USER"){
-            User* user = verifyUserName(users_list, response.second);
+            user = verifyUserName(users_list, response.second);
             if (user != nullptr) {
-                sendResponse(client_fd, "125\n");
+                sendResponse(client_fd,"331 Username found\n");
+                sendResponse(client_fd,"Please enter the password\n");
                 sendPasswordAuthentication(client_fd);
             } else {
                 sendResponse(client_fd, "530 Invalid username\n");
             }
+            continue;
+        }
+        else if(user == nullptr || !authenticated){
+            sendResponse(client_fd,"530 not logged in\n");
+            sendResponse(client_fd,"Please enter the username\n");
+            continue;
         }
         else if(response.first == "PASSWORD"){
-
+            if(verifyPassword(user,response.second)){
+                sendResponse(client_fd,"230 Logged in sucessfully\n");
+                authenticated = true;
+            }
+            else{
+                sendResponse(client_fd,"Please enter the correct password\n");
+                //or have the client change username
+            }
+            continue;
+        }
+        else if(response.first == "RETRIEVE"){
+            retrieve(response.second,client_addr,client_len);
+        }
+        else if(response.second == "UPLOAD"){
+            upload(response.second);
+        }
+        else{
+            sendResponse(client_fd, "500 Unknown command\n");
         }
         
     }
