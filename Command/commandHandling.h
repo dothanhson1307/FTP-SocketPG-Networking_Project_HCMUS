@@ -8,8 +8,10 @@
 
 using std::string;
 
+
+// manage number of people beign listened, if out of range --> give more listen slots. 
 struct SessionState {
-    std::string username;
+    string username;   
     bool usernameAccepted = false;
     bool loggedIn = false;
     bool quitRequested = false;

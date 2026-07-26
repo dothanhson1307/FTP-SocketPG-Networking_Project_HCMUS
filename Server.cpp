@@ -72,7 +72,8 @@ int main() {
         close(serverFd);
         return 1;
     }
-
+    
+    // session
     if (listen(serverFd, 5) < 0) {
         std::cerr << "[Server] Listen failed.\n";
         close(serverFd);
