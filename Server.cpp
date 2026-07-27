@@ -115,7 +115,7 @@ int main() {
         return 1;
     }
 
-    SessionState session;
+    ClientData session;
     string pendingData;
     char buffer[SERVER_BUFFER_SIZE];
 
