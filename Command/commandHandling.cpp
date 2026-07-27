@@ -55,10 +55,13 @@ std::vector<std::vector<string>> read(string& pendingData) {
 std::unordered_map<string, CommandHandler> router = {
     {"USER", handleUser},
     {"PASS", handlePass},
-    {"QUIT", handleQuit}
+    {"QUIT", handleQuit},
+    {"PWD", handlePwd},
+    {"MKD", handleMkd},
+    {"RMD", handleRmd}
 };
 
-string executeCommand(const std::vector<string>& args, SessionState& session) {
+string executeCommand(const std::vector<string>& args, ClientData& session) {
     if (args.empty()) {
         return "500 Syntax error, command unrecognized!\r\n";
     }
