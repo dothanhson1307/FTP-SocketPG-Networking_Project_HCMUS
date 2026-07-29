@@ -37,8 +37,6 @@
 # Executables
 server_app
 client_app
-server
-client
 *.exe
 *.out
 *.app
@@ -77,4 +75,5 @@ Testing/
 #Build files
 Makefile
 
-
+.DS_Store
+*.DS_Store
