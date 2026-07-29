@@ -1,4 +1,5 @@
 #include "User.h"
+//#include tao lao
 
 User::User(string n,string p):username(n),password(p){}
 

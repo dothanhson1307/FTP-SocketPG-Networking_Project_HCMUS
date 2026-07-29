@@ -1,7 +1,8 @@
-#include "ResponseRelated/FileManipulation/Retrieve.h"
-#include "ResponseRelated/FileManipulation/Upload.h"
-#include "ResponseRelated/ResponseHandling/ResponseHandling.h"
-#include "ResponseRelated/FileManipulation/fileUtilities.h"
+#include "../ResponseRelated/FileManipulation/Retrieve.h"
+#include "../ResponseRelated/FileManipulation/Upload.h"
+#include "../ResponseRelated/ResponseHandling/ResponseHandling.h"
+#include "../ResponseRelated/FileManipulation/fileUtilities.h"
+#include "../ResponseRelated/Integrity/Hash.h"
 #include <cstddef>
 #include <iostream>
 #include <cstring>     
@@ -80,6 +81,13 @@ int main(){
                 
                 retrieve(user_res.second, udp_server, sizeof(udp_server));
             }
+        }
+        else if (user_res.first == "HASH"){
+            sendResponse(client_fd, input + "\n");
+            ssize_t hash = recv(client_fd,buffer,buffer_capacity,0);
+            buffer[hash] = '\0';
+            std::cerr<<"Hash of "+ user_res.second + " recieved\n";
+            std::cout<< string(buffer) <<'\n';
         }
         else {
             sendResponse(client_fd, input + "\n");
