@@ -9,32 +9,11 @@
 #include <netinet/in.h>
 
 #include "Server.h"
-#include "Command/commandHandling.h"
-#include "Command/command.h"
+#include "Command/Router/CommandRouter.h"
+#include "Helper/FtpReply.h"
+#include "Helper/SocketHelper.h"
 
 using std::string;
-
-bool sendAll(int socketFd, const std::string& message) {
-    size_t totalSent = 0;
-
-    while (totalSent < message.size()) {
-        ssize_t sent = send(
-            socketFd,
-            message.data() + totalSent,
-            message.size() - totalSent,
-            0
-        );
-        
-        // xay ra khi viec send(..) bi loi: client quit/ disconnect/ invalid socket/ loi mang
-        if (sent <= 0) {
-            return false;
-        }
-
-        totalSent += static_cast<size_t>(sent);
-    }
-
-    return true;
-}
 
 int main() {
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -109,13 +88,15 @@ int main() {
     std::cout << "[Server] Client connected: "
               << clientIp << "\n";
 
-    if (!sendAll(clientFd, "220 Hybrid FTP server ready\r\n")) {
+    if (!sendAll(clientFd, ftpServiceReady())) {
         close(clientFd);
         close(serverFd);
         return 1;
     }
 
     ClientData session;
+    session.clientAddress = clientAddress;
+    session.clientFd = clientFd;
     string pendingData;
     char buffer[SERVER_BUFFER_SIZE];
 

@@ -1,14 +1,24 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
+
+using std::string;
 
 inline constexpr int CLIENT_CONTROL_PORT = 8080;
 inline constexpr int CLIENT_BUFFER_SIZE = 1024;
 
-bool sendAll(int socketFd, const std::string& message);
+// This is local client state only.  It lets STOR find files in the folder of
+// the user that has successfully logged in; it is not sent to the server.
+struct ClientSession {
+    string username;
+    bool usernameAccepted = false;
+    bool loggedIn = false;
+    std::filesystem::path currentDir = ".";
+};
 
 bool receiveLine(
     int socketFd,
-    std::string& pendingData,
-    std::string& response
+    string& pendingData,
+    string& response
 );

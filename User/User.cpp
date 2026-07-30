@@ -1,6 +1,8 @@
 #include "User.h"
 //#include tao lao
 
+using std::string;
+
 User::User(string n,string p):username(n),password(p){}
 
 string User::getUsername(){return username;}

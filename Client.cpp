@@ -1,36 +1,72 @@
 #include <arpa/inet.h>
+#include <cctype>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 
 #include "Client.h"
+#include "Helper/SocketHelper.h"
+#include "Command/Handlers/Transfer/TransferClient.h"
 
 using std::string;
 
-// logic tuong tu ben server.cpp
-bool sendAll(int socketFd, const string& message) {
-    size_t totalSent = 0;
+namespace {
 
-    while (totalSent < message.size()) {
-        ssize_t sent = send(
-            socketFd,
-            message.data() + totalSent,
-            message.size() - totalSent,
-            0
-        );
+std::vector<string> tokenizeCommand(const string& command) {
+    std::istringstream stream(command);
+    std::vector<string> tokens;
+    string token;
 
-        if (sent <= 0) {
-            return false;
-        }
-
-        totalSent += static_cast<size_t>(sent);
+    while (stream >> token) {
+        tokens.push_back(token);
     }
 
-    return true;
+    return tokens;
 }
+
+bool hasReplyCode(const string& response, const string& code) {
+    return response.rfind(code, 0) == 0;
+}
+
+void updateSessionAfterReply(
+    const string& command,
+    const string& response,
+    ClientSession& session
+) {
+    const std::vector<string> arguments = tokenizeCommand(command);
+    if (arguments.empty()) {
+        return;
+    }
+
+    string commandName = arguments.front();
+    for (char& character : commandName) {
+        character = static_cast<char>(
+            std::toupper(static_cast<unsigned char>(character))
+        );
+    }
+
+    if (commandName == "USER" && arguments.size() == 2) {
+        if (hasReplyCode(response, "331")) {
+            session.username = arguments[1];
+            session.usernameAccepted = true;
+            session.loggedIn = false;
+        } else {
+            session = ClientSession{};
+        }
+        return;
+    }
+
+    if (commandName == "PASS") {
+        session.loggedIn = session.usernameAccepted && hasReplyCode(response, "230");
+    }
+}
+
+} // namespace
 
 bool receiveLine(
     int socketFd,
@@ -102,6 +138,7 @@ int main() {
 
     string pendingData;
     string response;
+    ClientSession session;
 
     if (!receiveLine(clientFd, pendingData, response)) {
         std::cerr << "[Client] Cannot receive server greeting.\n";
@@ -124,6 +161,16 @@ int main() {
             continue;
         }
 
+        if (handleTransferCommand(
+                clientFd,
+                serverAddress,
+                pendingData,
+                session,
+                command
+            )) {
+            continue;
+        }
+
         if (!sendAll(clientFd, command + "\r\n")) {
             std::cerr << "[Client] Send failed.\n";
             break;
@@ -135,6 +182,7 @@ int main() {
         }
 
         std::cout << response;
+        updateSessionAfterReply(command, response, session);
 
         // neu code 221 xuat hien o dau respone (index 0, 1, 2) thi break
         if (response.compare(0, 3, "221") == 0) {

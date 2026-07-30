@@ -4,7 +4,9 @@
 #include <cstring>
 #include <unistd.h>
 
-std::vector<RDTPacket> splitPacketsInFile(const std::string& filepath) {
+using std::string;
+
+std::vector<RDTPacket> splitPacketsInFile(const string& filepath) {
     std::vector<RDTPacket> packets;
     std::ifstream fin(filepath, std::ios::binary);
     if (!fin.is_open()) {
@@ -33,7 +35,7 @@ std::vector<RDTPacket> splitPacketsInFile(const std::string& filepath) {
     return packets;
 }
 
-void rdt_send(int client_fd, const std::string& filepath, const sockaddr* des, socklen_t deslen) {
+void rdt_send(int client_fd, const string& filepath, const sockaddr* des, socklen_t deslen) {
     std::vector<RDTPacket> packets = splitPacketsInFile(filepath);
     struct timeval tv{ .tv_sec = 2, .tv_usec = 0 };
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
@@ -56,7 +58,7 @@ void rdt_send(int client_fd, const std::string& filepath, const sockaddr* des, s
     }
 }
 
-void rdt_recv(int sockfd, const std::string& output_filepath) {
+void rdt_recv(int sockfd, const string& output_filepath) {
     std::ofstream fout(output_filepath, std::ios::binary);
     if (!fout.is_open()) {
         std::cerr << "Failed to open output file: " << output_filepath << "\n";
