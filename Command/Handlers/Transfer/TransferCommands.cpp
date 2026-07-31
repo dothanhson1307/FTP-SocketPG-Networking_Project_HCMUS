@@ -1,10 +1,10 @@
 #include "TransferCommands.h"
 
-#include "../../../Rdt_udp/RDT.h"
-#include "../../../ResponseRelated/Integrity/Hash.h"
-#include "../../../Server.h"
-#include "../../../Helper/FtpReply.h"
-#include "../../../Helper/SocketHelper.h"
+#include "Architecture/RdtUdp/RDT.h"
+#include "Command/Integrity/Hash.h"
+#include "Server/Server.h"
+#include "Helper/FtpReply.h"
+#include "Helper/SocketIO.h"
 
 #include <arpa/inet.h>
 #include <filesystem>
@@ -13,137 +13,84 @@
 
 using std::string;
 
-bool isLoggedIn(const ClientData& session) {
+static bool isLoggedIn(const ServerSession& session) {
     return session.loggedIn && !session.homeDir.empty();
 }
 
-bool sendTransferStartReply(const ClientData& session, const string& reply) {
+static bool sendSessionReply(const ServerSession& session, const string& reply) {
     return sendAll(session.clientFd, reply);
 }
 
-string handleRetr(const std::vector<string>& args, ClientData& session) {
+string handleRetr(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         return ftpInvalidArguments();
     }
+
     if (!isLoggedIn(session)) {
         return ftpNotLoggedIn();
     }
 
-    if (args[1].empty()) {
-        return ftpFileUnavailable();
-    }
-
-    const std::filesystem::path downloadableDirectory = std::filesystem::absolute("server_data/downloadable_files");
-    const std::filesystem::path requestedFile = std::filesystem::path(args[1]).filename();
-    std::filesystem::path source = downloadableDirectory / requestedFile;
-    
-    // check if the file is existed - file means *.exe, *.txt, ... not folder
-    if (!std::filesystem::is_regular_file(source)) {
-        return ftpFileUnavailable();
-    }
-
-    // send reply code and notification befor do transfer (download/upload both need)
-    sendTransferStartReply(session, ftpOpeningDataConnection("RETR"));
-
-    const int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udpSocket < 0) {
-        return ftpCannotOpenDataConnection();
-    }
-
-    sockaddr_in peer = session.clientAddress;
-    peer.sin_port = htons(kDataPort); // Now was fixed = 8081
-
-    rdt_send(
-        udpSocket,
-        source.string(),
-        reinterpret_cast<const sockaddr*>(&peer),
-        sizeof(peer)
-    );
-    close(udpSocket);
-
-    return ftpTransferComplete();
-}
-
-string handleStor(const std::vector<string>& args, ClientData& session) {
-    if (args.size() != 2) {
-        return ftpInvalidArguments();
-    }
-    if (!isLoggedIn(session)) {
-        return ftpNotLoggedIn();
-    }
-
-    if (args[1].empty()) {
-        return ftpFileUnavailable();
-    }
-
-    /*
-    Now i'm allowing client to upload files from "server_data/Uploaded_files".
-    But, arcording to the project's require, we must just allow client to upload files from there space - 
-    that is "user_data/username". So we need to refactor the code below.
-    */
-
-    // get file name *.exe, *.txt, ...
     std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-    std::filesystem::path destination = std::filesystem::absolute("server_data/Uploaded_files");
-    // check if the folder is existed
-    if(!std::filesystem::is_directory(destination / session.username)) {
-        std::filesystem::create_directories(destination / session.username);
-    }
-    destination = destination / session.username;
+    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
 
-    // check if the file is existed - file means *.exe, *.txt, ... not folder
-    if (std::filesystem::is_regular_file(destination / filename)) {
-        // handle duplicate file name later....
-        return ftpFileAlreadyExists();
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(fullPath, error) || error) {
+        return ftpFileUnavailable();
     }
 
-    sendTransferStartReply(session, ftpOpeningDataConnection("STOR"));
-
-    int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udpSocket < 0) {
-        return ftpCannotOpenDataConnection();
+    if (!sendSessionReply(session, ftpOpeningDataConnection("RETR"))) {
+        return "";
     }
 
-    int reuseAddress = 1;
-    setsockopt(udpSocket, SOL_SOCKET, SO_REUSEADDR, &reuseAddress, sizeof(reuseAddress));
-    
-    sockaddr_in receiverAddress{};
-    receiverAddress.sin_family = AF_INET;
-    receiverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
-    receiverAddress.sin_port = htons(kDataPort);
-    if (bind(udpSocket, reinterpret_cast<const sockaddr*>(&receiverAddress), sizeof(receiverAddress)) < 0) {
-        close(udpSocket);
-        udpSocket = -1;
-    }
+    sockaddr_in clientUdpAddr = session.clientAddress;
+    clientUdpAddr.sin_port = htons(kDataPort);
 
-    if (udpSocket < 0) {
-        return ftpCannotOpenDataConnection();
-    }
-
-    rdt_recv(udpSocket, (destination / filename).string());
-    // handle when file recieved is fail - return a reply
-    close(udpSocket);
+    rdtSendFile(
+        fullPath.string(),
+        clientUdpAddr,
+        sizeof(clientUdpAddr)
+    );
 
     return ftpTransferComplete();
 }
 
-string handleHash(const std::vector<string>& args, ClientData& session) {
+string handleStor(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         return ftpInvalidArguments();
     }
+
     if (!isLoggedIn(session)) {
         return ftpNotLoggedIn();
     }
 
-    std::filesystem::path source = session.homeDir / std::filesystem::path(args[1]).filename();
-    source = source.lexically_normal();
-    if (!std::filesystem::is_regular_file(source)) {
+    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
+
+    if (!sendSessionReply(session, ftpOpeningDataConnection("STOR"))) {
+        return "";
+    }
+
+    rdtReceiveFile(fullPath.string());
+
+    return ftpTransferComplete();
+}
+
+string handleHash(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        return ftpInvalidArguments();
+    }
+
+    if (!isLoggedIn(session)) {
+        return ftpNotLoggedIn();
+    }
+
+    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
+
+    string hashValue = calculateFileSHA256(fullPath.string());
+    if (hashValue.empty()) {
         return ftpFileUnavailable();
     }
 
-    const string hash = calculateFileSHA256(source.string());
-    if (hash.empty()) {
-        return ftpFileUnavailable();
-    }
-    return ftpSha256(hash);
+    return ftpSha256(hashValue);
 }

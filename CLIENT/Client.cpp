@@ -10,8 +10,8 @@
 #include <netinet/in.h>
 
 #include "Client.h"
-#include "Helper/SocketHelper.h"
-#include "Command/Handlers/Transfer/TransferClient.h"
+#include "Helper/SocketIO.h"
+#include "Client/TransferClient.h"
 
 using std::string;
 
@@ -29,7 +29,7 @@ std::vector<string> tokenizeCommand(const string& command) {
     return tokens;
 }
 
-bool hasReplyCode(const string& response, const string& code) {
+bool startsWithReplyCode(const string& response, const string& code) {
     return response.rfind(code, 0) == 0;
 }
 
@@ -51,7 +51,7 @@ void updateSessionAfterReply(
     }
 
     if (commandName == "USER" && arguments.size() == 2) {
-        if (hasReplyCode(response, "331")) {
+        if (startsWithReplyCode(response, "331")) {
             session.username = arguments[1];
             session.usernameAccepted = true;
             session.loggedIn = false;
@@ -62,7 +62,7 @@ void updateSessionAfterReply(
     }
 
     if (commandName == "PASS") {
-        session.loggedIn = session.usernameAccepted && hasReplyCode(response, "230");
+        session.loggedIn = session.usernameAccepted && startsWithReplyCode(response, "230");
     }
 }
 
@@ -184,7 +184,6 @@ int main() {
         std::cout << response;
         updateSessionAfterReply(command, response, session);
 
-        // neu code 221 xuat hien o dau respone (index 0, 1, 2) thi break
         if (response.compare(0, 3, "221") == 0) {
             break;
         }

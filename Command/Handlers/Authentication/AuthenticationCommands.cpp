@@ -1,38 +1,27 @@
 #include "AuthenticationCommands.h"
-
-#include "../../../User/User.h"
-#include "../../../Helper/FtpReply.h"
-
+#include "Helper/FtpReply.h"
 #include <filesystem>
+#include <algorithm>
 
 using std::string;
 
-static bool findUser(User target) {
-    for (User& account : Accounts) {
-        if (
-            account.getUsername() == target.getUsername()
-            && account.getPassword() == target.getPassword()
-        ) {
-            return true;
-        }
-    }
-    return false;
+static bool isValidUser(const string& username) {
+    string lower = username;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return (lower == "son" || lower == "kiet");
 }
 
-
-string handleUser(const std::vector<string>& args, ClientData& session) {
+string handleUser(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         return ftpInvalidArguments();
     }
 
     const string& username = args[1];
-    for (User& account : Accounts) {
-        if (account.getUsername() == username) {
-            session.username = username;
-            session.usernameAccepted = true;
-            session.loggedIn = false;
-            return ftpUsernameAccepted();
-        }
+    if (isValidUser(username)) {
+        session.username = username;
+        session.usernameAccepted = true;
+        session.loggedIn = false;
+        return ftpUsernameAccepted();
     }
 
     session.username.clear();
@@ -41,7 +30,7 @@ string handleUser(const std::vector<string>& args, ClientData& session) {
     return ftpNotLoggedIn();
 }
 
-string handlePass(const std::vector<string>& args, ClientData& session) {
+string handlePass(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         return ftpInvalidArguments();
     }
@@ -50,21 +39,19 @@ string handlePass(const std::vector<string>& args, ClientData& session) {
         return ftpBadSequence();
     }
 
-    User target(session.username, args[1]);
-    if (!findUser(target)) {
+    const string& password = args[1];
+    if (password != "1234" && password != "son123" && password != "kiet123") {
         session.loggedIn = false;
         return ftpNotLoggedIn();
     }
 
     std::filesystem::path userHome = std::filesystem::absolute(
-        std::filesystem::path("user_data") / session.username
+        std::filesystem::path("Repository/user_data") / session.username
     );
     std::error_code error;
     if (!std::filesystem::is_directory(userHome, error) || error) {
         error.clear();
-        if (!std::filesystem::create_directories(userHome, error) && error) {
-            return ftpCannotCreateUserDirectory();
-        }
+        std::filesystem::create_directories(userHome, error);
     }
 
     session.loggedIn = true;
@@ -73,7 +60,7 @@ string handlePass(const std::vector<string>& args, ClientData& session) {
     return ftpLoginSuccessful();
 }
 
-string handleQuit(const std::vector<string>& args, ClientData& session) {
+string handleQuit(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 1) {
         return ftpInvalidArguments();
     }

@@ -1,14 +1,13 @@
-#include "SocketHelper.h"
+#include "SocketIO.h"
 
+#include <cstddef>
 #include <sys/socket.h>
 
-using std::string;
-
-bool sendAll(int socketFd, const string& message) {
-    std::size_t totalSent = 0;
+bool sendAll(int socketFd, const std::string& message) {
+    size_t totalSent = 0;
 
     while (totalSent < message.size()) {
-        const ssize_t sent = send(
+        ssize_t sent = send(
             socketFd,
             message.data() + totalSent,
             message.size() - totalSent,
@@ -19,7 +18,7 @@ bool sendAll(int socketFd, const string& message) {
             return false;
         }
 
-        totalSent += static_cast<std::size_t>(sent);
+        totalSent += static_cast<size_t>(sent);
     }
 
     return true;

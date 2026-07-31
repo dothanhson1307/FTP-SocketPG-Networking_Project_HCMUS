@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Session/ClientData.h"
+#include "Architecture/Session/ServerSession.h"
 
 #include <functional>
 #include <string>
@@ -9,7 +9,7 @@
 using std::string;
 
 using CommandArguments = std::vector<string>;
-using CommandHandler = std::function<string(const CommandArguments&, ClientData&)>;
+using CommandHandler = std::function<string(const CommandArguments&, ServerSession&)>;
 
-std::vector<CommandArguments> read(string& pendingData);
-string executeCommand(const CommandArguments& args, ClientData& session);
+std::vector<CommandArguments> extractCommandTokens(string& pendingData);
+string executeCommand(const CommandArguments& args, ServerSession& session);

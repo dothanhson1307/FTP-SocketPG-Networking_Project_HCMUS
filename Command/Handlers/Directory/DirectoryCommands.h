@@ -1,12 +1,13 @@
 #pragma once
 
-#include "../../Session/ClientData.h"
+#include "Architecture/Session/ServerSession.h"
 
 #include <string>
 #include <vector>
 
 using std::string;
 
-string handlePwd(const std::vector<string>& args, ClientData& session);
-string handleMkd(const std::vector<string>& args, ClientData& session);
-string handleRmd(const std::vector<string>& args, ClientData& session);
+string handlePwd(const std::vector<string>& args, ServerSession& session);
+string handleCwd(const std::vector<string>& args, ServerSession& session);
+string handleMkd(const std::vector<string>& args, ServerSession& session);
+string handleRmd(const std::vector<string>& args, ServerSession& session);

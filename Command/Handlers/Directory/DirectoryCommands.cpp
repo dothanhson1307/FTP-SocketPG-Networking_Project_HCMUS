@@ -1,59 +1,101 @@
 #include "DirectoryCommands.h"
 
-#include "../../../Helper/FtpReply.h"
+#include "Helper/FtpReply.h"
 
 #include <filesystem>
 
 using std::string;
 
-string handlePwd(const std::vector<string>& args, ClientData& session) {
+static bool isLoggedIn(const ServerSession& session) {
+    return session.loggedIn && !session.homeDir.empty();
+}
+
+string handlePwd(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 1) {
         return ftpInvalidArguments();
     }
 
-    if (!session.loggedIn) {
+    if (!isLoggedIn(session)) {
         return ftpNotLoggedIn();
     }
 
-    const string path = session.homeDir.string() + "\\" + session.currentDir.string();
-    return ftpCurrentDirectory(path);
+    return ftpCurrentDirectory(session.currentDir.generic_string());
 }
 
-string handleMkd(const std::vector<string>& args, ClientData& session) {
+string handleCwd(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         return ftpInvalidArguments();
     }
 
-    if (!session.loggedIn) {
+    if (!isLoggedIn(session)) {
         return ftpNotLoggedIn();
     }
 
-    const std::filesystem::path directory = session.homeDir / session.currentDir;
-    if (std::filesystem::create_directory(directory / args[1])) {
-        return ftpDirectoryCreated();
+    std::filesystem::path target = args[1];
+    std::filesystem::path newCurrent = session.currentDir;
+
+    if (target.is_absolute()) {
+        newCurrent = target.relative_path();
+    } else {
+        newCurrent /= target;
     }
 
-    return ftpCannotCreateDirectory();
-}
+    newCurrent = newCurrent.lexically_normal();
 
-string handleRmd(const std::vector<string>& args, ClientData& session) {
-    if (args.size() != 2) {
-        return ftpInvalidArguments();
-    }
+    std::filesystem::path resolvedPath = session.homeDir / newCurrent;
 
-    if (!session.loggedIn) {
-        return ftpNotLoggedIn();
-    }
-
-    const std::filesystem::path targetDirectory = session.homeDir / session.currentDir / args[1];
     std::error_code error;
-    if (!std::filesystem::is_directory(targetDirectory, error) || error) {
+    if (!std::filesystem::is_directory(resolvedPath, error) || error) {
         return ftpDirectoryDoesNotExist();
     }
 
-    if (!std::filesystem::remove(targetDirectory, error) || error) {
-        return ftpCannotDeleteDirectory();
+    auto relative = std::filesystem::relative(resolvedPath, session.homeDir, error);
+    if (error || relative.empty() || relative.string().find("..") == 0) {
+        return ftpDirectoryDoesNotExist();
     }
 
-    return ftpDirectoryDeleted();
+    session.currentDir = relative;
+    return ftpLoginSuccessful();
+}
+
+string handleMkd(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        return ftpInvalidArguments();
+    }
+
+    if (!isLoggedIn(session)) {
+        return ftpNotLoggedIn();
+    }
+
+    std::filesystem::path newDir = session.homeDir / session.currentDir / args[1];
+
+    std::error_code error;
+    if (!std::filesystem::create_directory(newDir, error) || error) {
+        return ftpCannotCreateDirectory();
+    }
+
+    return ftpDirectoryCreated();
+}
+
+string handleRmd(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        return ftpInvalidArguments();
+    }
+
+    if (!isLoggedIn(session)) {
+        return ftpNotLoggedIn();
+    }
+
+    std::filesystem::path targetDir = session.homeDir / session.currentDir / args[1];
+
+    std::error_code error;
+    if (!std::filesystem::is_directory(targetDir, error) || error) {
+        return ftpDirectoryDoesNotExist();
+    }
+
+    if (std::filesystem::remove(targetDir, error) && !error) {
+        return ftpDirectoryDeleted();
+    }
+
+    return ftpCannotDeleteDirectory();
 }

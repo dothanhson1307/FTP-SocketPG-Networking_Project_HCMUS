@@ -11,21 +11,27 @@
 
 using std::string;
 
-std::vector<CommandArguments> read(string& pendingData) {
+std::vector<CommandArguments> extractCommandTokens(string& pendingData) {
     std::vector<CommandArguments> commands;
-    std::size_t newLinePosition;
 
-    while ((newLinePosition = pendingData.find('\n')) != string::npos) {
-        string line = pendingData.substr(0, newLinePosition);
-        pendingData.erase(0, newLinePosition + 1);
+    while (true) {
+        size_t newlinePosition = pendingData.find('\n');
 
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+        if (newlinePosition == string::npos) {
+            break;
         }
 
-        std::istringstream lineStream(line);
+        string rawLine = pendingData.substr(0, newlinePosition);
+        pendingData.erase(0, newlinePosition + 1);
+
+        size_t carriageReturnPosition = rawLine.find('\r');
+        if (carriageReturnPosition != string::npos) {
+            rawLine.erase(carriageReturnPosition, 1);
+        }
+
+        std::istringstream stream(rawLine);
         string token;
-        if (!(lineStream >> token)) {
+        if (!(stream >> token)) {
             continue;
         }
 
@@ -36,36 +42,38 @@ std::vector<CommandArguments> read(string& pendingData) {
         }
 
         CommandArguments arguments{token};
-        while (lineStream >> token) {
+        while (stream >> token) {
             arguments.push_back(token);
         }
+
         commands.push_back(arguments);
     }
 
     return commands;
 }
 
-static const std::unordered_map<string, CommandHandler> kRouter = {
-    {"USER", handleUser},
-    {"PASS", handlePass},
-    {"QUIT", handleQuit},
-    {"PWD", handlePwd},
-    {"MKD", handleMkd},
-    {"RMD", handleRmd},
-    {"RETR", handleRetr},
-    {"STOR", handleStor},
-    {"HASH", handleHash}
-};
-
-string executeCommand(const CommandArguments& args, ClientData& session) {
+string executeCommand(const CommandArguments& args, ServerSession& session) {
     if (args.empty()) {
-        return ftpCommandUnrecognized();
+        return "";
     }
 
-    const auto iterator = kRouter.find(args[0]);
-    if (iterator == kRouter.end()) {
-        return ftpCommandNotImplemented();
+    static const std::unordered_map<string, CommandHandler> routes = {
+        {"USER", handleUser},
+        {"PASS", handlePass},
+        {"PWD",  handlePwd},
+        {"CWD",  handleCwd},
+        {"MKD",  handleMkd},
+        {"RMD",  handleRmd},
+        {"RETR", handleRetr},
+        {"STOR", handleStor},
+        {"HASH", handleHash},
+        {"QUIT", handleQuit}
+    };
+
+    auto it = routes.find(args[0]);
+    if (it != routes.end()) {
+        return it->second(args, session);
     }
 
-    return iterator->second(args, session);
+    return ftpCommandUnrecognized();
 }

@@ -1,56 +1,37 @@
 # Prerequisites
 *.d
 
-# Compiled Object files
-*.slo
-*.lo
+# Object files
 *.o
+*.ko
 *.obj
+*.elf
 
-# Precompiled Headers
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Shared libraries
 *.gch
 *.pch
 
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
+# Static libraries
 *.a
 *.lib
 
 # Executables
-server_app
-client_app
+/server_app
+/client_app
+server
+client
 *.exe
 *.out
 *.app
 
-# Build directories
-build/
-Build/
-build-*/
-
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
-
-compile_commands.json
 
 # Temporary files
 *.tmp
@@ -68,12 +49,14 @@ vcpkg_installed/
 Testing/
 .cache/
 
-#Vs code
+# Vs code & IDE tools
 .vscode/
 .clangd
+compile_commands.json
 
-#Build files
+# Build files
 Makefile
 
+# OS Metadata
 .DS_Store
 *.DS_Store

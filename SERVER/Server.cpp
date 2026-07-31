@@ -11,7 +11,7 @@
 #include "Server.h"
 #include "Command/Router/CommandRouter.h"
 #include "Helper/FtpReply.h"
-#include "Helper/SocketHelper.h"
+#include "Helper/SocketIO.h"
 
 using std::string;
 
@@ -42,7 +42,7 @@ int main() {
     serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     serverAddress.sin_port = htons(SERVER_CONTROL_PORT);
 
-    if (bind(
+    if (::bind(
             serverFd,
             reinterpret_cast<sockaddr*>(&serverAddress),
             sizeof(serverAddress)
@@ -51,8 +51,7 @@ int main() {
         close(serverFd);
         return 1;
     }
-    
-    // session
+
     if (listen(serverFd, 5) < 0) {
         std::cerr << "[Server] Listen failed.\n";
         close(serverFd);
@@ -76,7 +75,7 @@ int main() {
         return 1;
     }
 
-    char clientIp[INET_ADDRSTRLEN]{}; // IPv4 dang thap phan ~ 16 ky tu
+    char clientIp[INET_ADDRSTRLEN]{};
 
     inet_ntop(
         AF_INET,
@@ -94,7 +93,7 @@ int main() {
         return 1;
     }
 
-    ClientData session;
+    ServerSession session;
     session.clientAddress = clientAddress;
     session.clientFd = clientFd;
     string pendingData;
@@ -121,11 +120,10 @@ int main() {
         }
 
         pendingData.append(buffer, static_cast<size_t>(received));
-        
 
         std::vector<std::vector<string>> commands;
 
-        commands = read(pendingData);
+        commands = extractCommandTokens(pendingData);
 
         for (const auto& arguments : commands) {
             string response = executeCommand(arguments, session);
