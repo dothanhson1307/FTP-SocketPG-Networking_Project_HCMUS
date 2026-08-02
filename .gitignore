@@ -60,3 +60,5 @@ Makefile
 # OS Metadata
 .DS_Store
 *.DS_Store
+
+.agents/

@@ -42,13 +42,18 @@ string handleRetr(const std::vector<string>& args, ServerSession& session) {
         return "";
     }
 
-    sockaddr_in clientUdpAddr = session.clientAddress;
-    clientUdpAddr.sin_port = htons(kDataPort);
+    int targetPort = (session.dataPort > 0) ? session.dataPort : kDataPort;
+    sockaddr_in targetUdpAddr = session.clientAddress;
+
+    if (!session.isPassiveMode && !session.dataIp.empty()) {
+        inet_pton(AF_INET, session.dataIp.c_str(), &targetUdpAddr.sin_addr);
+    }
+    targetUdpAddr.sin_port = htons(targetPort);
 
     rdtSendFile(
         fullPath.string(),
-        clientUdpAddr,
-        sizeof(clientUdpAddr)
+        targetUdpAddr,
+        sizeof(targetUdpAddr)
     );
 
     return ftpTransferComplete();
@@ -70,7 +75,11 @@ string handleStor(const std::vector<string>& args, ServerSession& session) {
         return "";
     }
 
-    rdtReceiveFile(fullPath.string());
+    int listenPort = (session.dataPort > 0) ? session.dataPort : kDataPort;
+    char clientIp[INET_ADDRSTRLEN]{};
+    inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+
+    rdtReceiveFile(fullPath.string(), listenPort, clientIp);
 
     return ftpTransferComplete();
 }

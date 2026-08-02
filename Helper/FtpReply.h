@@ -29,6 +29,9 @@ string ftpCannotOpenDataConnection();
 string ftpTransferAborted();
 string ftpTransferComplete();
 
+string ftpCommandSuccessful(const string& message);
+string ftpPassiveMode(const string& ipCommas, int p1, int p2);
+
 string ftpFileUnavailable();
 string ftpFileAlreadyExists();
 string ftpSha256(const string& digest);

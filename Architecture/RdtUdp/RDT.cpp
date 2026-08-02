@@ -4,7 +4,7 @@ uint16_t compute_checksum(const void *data, size_t len) {
     return calculateChecksum(data, len);
 }
 
-void rdtReceiveFile(string filename) {
+void rdtReceiveFile(string filename,int port,const string& allowedIp) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -17,12 +17,19 @@ void rdtReceiveFile(string filename) {
     sockaddr_in server_addr{}, client_addr{};
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(8081);
+    server_addr.sin_port = htons(port);
 
     if (::bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(sockfd);
         return;
+    }
+
+    if(!allowedIp.empty()) {
+        sockaddr_in expected_peer{};
+        expected_peer.sin_family = AF_INET;
+        inet_pton(AF_INET, allowedIp.c_str(), &expected_peer.sin_addr);
+        connect(sockfd, (struct sockaddr*)&expected_peer, sizeof(expected_peer));
     }
 
     ofstream file(filename, ios::binary);
@@ -32,7 +39,7 @@ void rdtReceiveFile(string filename) {
         return;
     }
 
-    cout << "[RDT Receiver] Listening for file payload on port 8081..." << endl;
+    cout << "[RDT Receiver] Listening for file payload on port "<< port << endl;
 
     socklen_t addr_len = sizeof(client_addr);
     char buffer[sizeof(RDTHeader) + MAX_PAYLOAD_SIZE];

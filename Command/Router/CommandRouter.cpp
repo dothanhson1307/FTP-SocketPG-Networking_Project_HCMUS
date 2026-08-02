@@ -3,6 +3,7 @@
 #include "../Handlers/Authentication/AuthenticationCommands.h"
 #include "../Handlers/Directory/DirectoryCommands.h"
 #include "../Handlers/Transfer/TransferCommands.h"
+#include "../Handlers/ModeDictator/DictateMode.h"
 #include "../../Helper/FtpReply.h"
 
 #include <cctype>
@@ -21,9 +22,11 @@ std::vector<CommandArguments> extractCommandTokens(string& pendingData) {
             break;
         }
 
+        //skipped pass command
         string rawLine = pendingData.substr(0, newlinePosition);
         pendingData.erase(0, newlinePosition + 1);
 
+        //trim '\r'
         size_t carriageReturnPosition = rawLine.find('\r');
         if (carriageReturnPosition != string::npos) {
             rawLine.erase(carriageReturnPosition, 1);
@@ -58,6 +61,8 @@ string executeCommand(const CommandArguments& args, ServerSession& session) {
     }
 
     static const std::unordered_map<string, CommandHandler> routes = {
+        {"PORT", handleActiveMode},
+        {"PASV", handlePassiveMode},
         {"USER", handleUser},
         {"PASS", handlePass},
         {"PWD",  handlePwd},

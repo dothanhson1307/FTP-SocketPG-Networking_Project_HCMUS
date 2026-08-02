@@ -27,6 +27,9 @@ string ftpCannotOpenDataConnection() { return "425 Cannot open data connection!\
 string ftpTransferAborted() { return "426 Connection closed; transfer aborted.\r\n"; }
 string ftpTransferComplete() { return "226 Transfer complete.\r\n"; }
 
+string ftpCommandSuccessful(const string& message) { return "200 " + message + "\r\n"; }
+string ftpPassiveMode(const string& ipCommas, int p1, int p2) { return "227 Entering Passive Mode (" + ipCommas + "," + std::to_string(p1) + "," + std::to_string(p2) + ")\r\n"; }
+
 string ftpFileUnavailable() { return "550 File unavailable.\r\n"; }
 string ftpFileAlreadyExists() { return "550 File already exists.\r\n"; }
 string ftpSha256(const string& digest) { return "213 " + digest + "\r\n"; }

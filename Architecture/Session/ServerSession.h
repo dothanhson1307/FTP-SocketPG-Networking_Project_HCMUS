@@ -15,7 +15,12 @@ struct ServerSession {
     std::filesystem::path homeDir;
     std::filesystem::path currentDir;
 
-    // runtime data, set by Server.cpp after accept(...)
+    string clientIP = "";
     sockaddr_in clientAddress{};
     int clientFd = -1;
+
+    //PORT va PASV tac dong
+    bool isPassiveMode = false;
+    string dataIp = "";
+    int dataPort = -1;
 };

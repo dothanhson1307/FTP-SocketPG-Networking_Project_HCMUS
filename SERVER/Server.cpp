@@ -4,6 +4,8 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <thread>
+#include <mutex>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -15,65 +17,7 @@
 
 using std::string;
 
-int main() {
-    int serverFd = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (serverFd < 0) {
-        std::cerr << "[Server] Cannot create socket.\n";
-        return 1;
-    }
-
-    int reuseAddress = 1;
-
-    if (setsockopt(
-            serverFd,
-            SOL_SOCKET,
-            SO_REUSEADDR,
-            &reuseAddress,
-            sizeof(reuseAddress)
-        ) < 0) {
-        std::cerr << "[Server] setsockopt failed.\n";
-        close(serverFd);
-        return 1;
-    }
-
-    sockaddr_in serverAddress{};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
-    serverAddress.sin_port = htons(SERVER_CONTROL_PORT);
-
-    if (::bind(
-            serverFd,
-            reinterpret_cast<sockaddr*>(&serverAddress),
-            sizeof(serverAddress)
-        ) < 0) {
-        std::cerr << "[Server] Bind failed.\n";
-        close(serverFd);
-        return 1;
-    }
-
-    if (listen(serverFd, 5) < 0) {
-        std::cerr << "[Server] Listen failed.\n";
-        close(serverFd);
-        return 1;
-    }
-
-    std::cout << "[Server] Listening on port " << SERVER_CONTROL_PORT << "...\n";
-
-    sockaddr_in clientAddress{};
-    socklen_t clientAddressLength = sizeof(clientAddress);
-
-    int clientFd = accept(
-        serverFd,
-        reinterpret_cast<sockaddr*>(&clientAddress),
-        &clientAddressLength
-    );
-
-    if (clientFd < 0) {
-        std::cerr << "[Server] Accept failed.\n";
-        close(serverFd);
-        return 1;
-    }
+void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddressLength){
 
     char clientIp[INET_ADDRSTRLEN]{};
 
@@ -89,8 +33,7 @@ int main() {
 
     if (!sendAll(clientFd, ftpServiceReady())) {
         close(clientFd);
-        close(serverFd);
-        return 1;
+        
     }
 
     ServerSession session;
@@ -141,6 +84,60 @@ int main() {
     }
 
     close(clientFd);
+}
+
+int main() {
+    int serverFd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (serverFd < 0) {
+        std::cerr << "[Server] Cannot create socket.\n";
+        return 1;
+    }
+
+    int reuseAddress = 1;
+
+    if (setsockopt(
+            serverFd,
+            SOL_SOCKET,
+            SO_REUSEADDR,
+            &reuseAddress,
+            sizeof(reuseAddress)
+        ) < 0) {
+        std::cerr << "[Server] setsockopt failed.\n";
+        close(serverFd);
+        return 1;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddress.sin_port = htons(SERVER_CONTROL_PORT);
+
+    if (::bind(
+            serverFd,
+            reinterpret_cast<sockaddr*>(&serverAddress),
+            sizeof(serverAddress)
+        ) < 0) {
+        std::cerr << "[Server] Bind failed.\n";
+        close(serverFd);
+        return 1;
+    }
+
+    if (listen(serverFd, 5) < 0) {
+        std::cerr << "[Server] Listen failed.\n";
+        close(serverFd);
+        return 1;
+    }
+
+    std::cout << "[Server] Listening on port " << SERVER_CONTROL_PORT << "...\n";
+
+    while(true){
+        sockaddr_in clientAddress{};
+        socklen_t clientAddressLength = sizeof(clientAddress);
+        int clientFd = accept(serverFd,reinterpret_cast<sockaddr*>(&clientAddress),&clientAddressLength);
+        std::thread client_session(handleNewClient,clientFd,clientAddress,clientAddressLength);
+        client_session.detach();
+    }
     close(serverFd);
 
     std::cout << "[Server] Stopped.\n";
