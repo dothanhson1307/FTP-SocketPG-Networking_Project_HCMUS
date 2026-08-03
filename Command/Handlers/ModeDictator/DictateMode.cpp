@@ -2,6 +2,8 @@
 #include "Helper/FtpReply.h"
 
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -13,6 +15,30 @@ bool isNumeric(const std::string& str) {
     return std::all_of(str.begin(), str.end(), [](unsigned char c) {
         return std::isdigit(c);
     });
+}
+
+int findAvailablePort() {
+    int tempFd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (tempFd < 0) return 8083;
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(0);
+
+    if (bind(tempFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        close(tempFd);
+        return 8083;
+    }
+
+    socklen_t len = sizeof(addr);
+    int assignedPort = 8083;
+    if (getsockname(tempFd, reinterpret_cast<sockaddr*>(&addr), &len) == 0) {
+        assignedPort = ntohs(addr.sin_port);
+    }
+
+    close(tempFd);
+    return assignedPort;
 }
 
 }
@@ -69,7 +95,7 @@ std::string handlePassiveMode(const std::vector<std::string>& args, ServerSessio
         return ftpNotLoggedIn();
     }
 
-    int passivePort = 8083;
+    int passivePort = findAvailablePort();
     session.dataPort = passivePort;
     session.isPassiveMode = true;
 

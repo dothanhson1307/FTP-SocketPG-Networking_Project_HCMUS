@@ -71,6 +71,7 @@ string executeCommand(const CommandArguments& args, ServerSession& session) {
         {"RMD",  handleRmd},
         {"RETR", handleRetr},
         {"STOR", handleStor},
+        {"APPE", handleAppe},
         {"HASH", handleHash},
         {"QUIT", handleQuit}
     };
