@@ -23,8 +23,6 @@
 # Executables
 /server_app
 /client_app
-server
-client
 *.exe
 *.out
 *.app
