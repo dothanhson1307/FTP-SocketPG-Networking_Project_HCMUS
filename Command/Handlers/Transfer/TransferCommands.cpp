@@ -113,13 +113,13 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
     sendAll(session.clientFd, ftpTransferComplete());
 }
 
-void handleAbort(const std::vector<string>& args, ServerSession& session) {
-    if (!isLoggedIn(session)) {
-        sendAll(session.clientFd, ftpNotLoggedIn());
-        return;
-    }
-    sendAll(session.clientFd, ftpTransferAborted());
-}
+// void handleAbort(const std::vector<string>& args, ServerSession& session) {
+//     if (!isLoggedIn(session)) {
+//         sendAll(session.clientFd, ftpNotLoggedIn());
+//         return;
+//     }
+//     sendAll(session.clientFd, ftpTransferAborted());
+// }
 
 void handleHash(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {

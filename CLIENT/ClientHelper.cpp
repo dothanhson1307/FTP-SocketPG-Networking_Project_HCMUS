@@ -87,14 +87,15 @@ bool receiveLine(
 ) {
     while (true) {
         size_t newlinePosition = pendingData.find('\n');
-
-        if (newlinePosition != string::npos) {
-            response = pendingData.substr(0, newlinePosition + 1);
-            pendingData.erase(0, newlinePosition + 1);
-
+        if(newlinePosition != string::npos) {
+            while(newlinePosition != string::npos) {
+                newlinePosition = pendingData.find('\n');
+                response += pendingData.substr(0, newlinePosition + 1);
+                pendingData.erase(0, newlinePosition + 1);
+            }
             return true;
         }
-
+        
         char buffer[CLIENT_BUFFER_SIZE];
 
         ssize_t received = recv(

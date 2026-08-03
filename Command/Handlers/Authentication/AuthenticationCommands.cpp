@@ -8,7 +8,6 @@ using std::string;
 
 static bool isValidUser(const string& username) {
     string lower = username;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     return (lower == "son" || lower == "kiet");
 }
 
@@ -74,4 +73,13 @@ void handleQuit(const std::vector<string>& args, ServerSession& session) {
 
     session.quitRequested = true;
     sendAll(session.clientFd, ftpGoodbye());
+}
+
+void handleNoop(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 1) {
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
+    }
+
+    sendAll(session.clientFd, ftpCommandSuccessful("NOOP successful; session remains active."));
 }
