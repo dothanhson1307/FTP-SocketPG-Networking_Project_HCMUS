@@ -55,7 +55,7 @@ string handleCwd(const std::vector<string>& args, ServerSession& session) {
     }
 
     session.currentDir = relative;
-    return ftpLoginSuccessful();
+    return ftpDirectoryChanged();
 }
 
 string handleMkd(const std::vector<string>& args, ServerSession& session) {
@@ -98,4 +98,19 @@ string handleRmd(const std::vector<string>& args, ServerSession& session) {
     }
 
     return ftpCannotDeleteDirectory();
+}
+
+string handleCdup(const std::vector<string>& args, ServerSession& session) {
+        if (args.size() != 1) {
+        return ftpInvalidArguments();
+    }
+
+    if (!isLoggedIn(session)) {
+        return ftpNotLoggedIn();
+    }
+
+    session.currentDir = session.currentDir.parent_path();
+    if(session.currentDir == "") session.currentDir = ".";
+
+    return ftpChangeToParentDirectory();
 }

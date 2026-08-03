@@ -23,6 +23,8 @@ string ftpCannotCreateDirectory();
 string ftpDirectoryDoesNotExist();
 string ftpCannotDeleteDirectory();
 string ftpDirectoryDeleted();
+string ftpChangeToParentDirectory();
+string ftpDirectoryChanged();
 
 string ftpOpeningDataConnection(const string& command);
 string ftpCannotOpenDataConnection();

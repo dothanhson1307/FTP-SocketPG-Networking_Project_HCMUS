@@ -21,6 +21,8 @@ string ftpCannotCreateDirectory() { return "550 Cannot create directory!\r\n"; }
 string ftpDirectoryDoesNotExist() { return "550 Directory does not exist.\r\n"; }
 string ftpCannotDeleteDirectory() { return "550 Cannot delete directory. It may not be empty.\r\n"; }
 string ftpDirectoryDeleted() { return "250 Directory deleted successfully.\r\n"; }
+string ftpChangeToParentDirectory() { return "250 Change the Client's working directory successfully.\r\n"; }
+string ftpDirectoryChanged() {return "250 Directory changed successfully.\r\n";}
 
 string ftpOpeningDataConnection(const string& command) { return "150 Opening UDP data connection for " + command + ".\r\n"; }
 string ftpCannotOpenDataConnection() { return "425 Cannot open data connection!\r\n"; }

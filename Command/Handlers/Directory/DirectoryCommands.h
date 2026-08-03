@@ -11,3 +11,4 @@ string handlePwd(const std::vector<string>& args, ServerSession& session);
 string handleCwd(const std::vector<string>& args, ServerSession& session);
 string handleMkd(const std::vector<string>& args, ServerSession& session);
 string handleRmd(const std::vector<string>& args, ServerSession& session);
+string handleCdup(const std::vector<string>& args, ServerSession& session);
