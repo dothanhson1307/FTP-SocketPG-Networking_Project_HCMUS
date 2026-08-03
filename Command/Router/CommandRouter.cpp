@@ -72,6 +72,7 @@ string executeCommand(const CommandArguments& args, ServerSession& session) {
         {"CDUP", handleCdup},
         {"RETR", handleRetr},
         {"STOR", handleStor},
+        {"APPE", handleAppe},
         {"HASH", handleHash},
         {"QUIT", handleQuit}
     };

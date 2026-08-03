@@ -4,7 +4,7 @@ uint16_t compute_checksum(const void *data, size_t len) {
     return calculateChecksum(data, len);
 }
 
-void rdtReceiveFile(string filename,int port,const string& allowedIp) {
+void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool& isAppend) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -31,8 +31,8 @@ void rdtReceiveFile(string filename,int port,const string& allowedIp) {
         inet_pton(AF_INET, allowedIp.c_str(), &expected_peer.sin_addr);
         connect(sockfd, (struct sockaddr*)&expected_peer, sizeof(expected_peer));
     }
-
-    ofstream file(filename, ios::binary);
+    std::ios::openmode openMode = std::ios::binary | ((isAppend) ? std::ios::app  : std::ios::trunc);
+    ofstream file(filename, openMode);
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
         close(sockfd);

@@ -42,7 +42,7 @@ string handleRetr(const std::vector<string>& args, ServerSession& session) {
         return "";
     }
 
-    int targetPort = (session.dataPort > 0) ? session.dataPort : kDataPort;
+    int targetPort = (session.dataPort > 0) ? session.dataPort : 8081;
     sockaddr_in targetUdpAddr = session.clientAddress;
 
     if (!session.isPassiveMode && !session.dataIp.empty()) {
@@ -75,13 +75,36 @@ string handleStor(const std::vector<string>& args, ServerSession& session) {
         return "";
     }
 
-    int listenPort = (session.dataPort > 0) ? session.dataPort : kDataPort;
+    int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
     char clientIp[INET_ADDRSTRLEN]{};
     inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
 
     rdtReceiveFile(fullPath.string(), listenPort, clientIp);
 
     return ftpTransferComplete();
+}
+
+string handleAppe(const std::vector<string>& args, ServerSession& session){
+    if(args.size()!=2) return ftpInvalidArguments();
+    if(!isLoggedIn(session)) return ftpNotLoggedIn();
+    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+    std::filesystem::path fullPath = std::filesystem::path("Repository/server_data/Appendables") / filename;
+
+    if(!sendSessionReply(session,ftpOpeningDataConnection("APPE"))){
+        return "";
+    }
+    int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
+    char clientIp[INET_ADDRSTRLEN]{};
+    inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+
+    rdtReceiveFile(fullPath.string(), listenPort, clientIp, true);
+
+    return ftpTransferComplete();
+}
+
+
+string handleAbort(const std::vector<string>& args, ServerSession& session){
+
 }
 
 string handleHash(const std::vector<string>& args, ServerSession& session) {

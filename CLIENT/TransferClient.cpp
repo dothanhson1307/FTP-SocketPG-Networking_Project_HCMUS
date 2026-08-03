@@ -114,7 +114,7 @@ bool handleTransferCommand(
         return true;
     }
 
-    if (commandName == "STOR") {
+    if (commandName == "STOR" || commandName == "APPE") {
         if (arguments.size() != 2) {
             return false;
         }
