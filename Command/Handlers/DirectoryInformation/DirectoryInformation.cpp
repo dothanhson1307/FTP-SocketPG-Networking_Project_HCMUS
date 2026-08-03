@@ -17,16 +17,15 @@ string handleList(const std::vector<string>& args, ServerSession& session) {
         return ftpNotLoggedIn();
     }
     
-    if(!std::filesystem::exists(args[1]) && !std::filesystem::is_directory(args[1])) {
-        return ftpDirectoryDoesNotExist();
-    }
-
-
     string targetDirectory;
     if (args.size() == 1) {
         targetDirectory = (session.homeDir.string() + "/" + session.currentDir.string());
     }
     else {
+        if(!std::filesystem::exists(args[1]) && !std::filesystem::is_directory(args[1])) {
+            return ftpDirectoryDoesNotExist();
+        }
+
         targetDirectory = args[1];
     }
     // [Type][Perms] [Size] [Name]
