@@ -60,3 +60,5 @@ Makefile
 *.DS_Store
 
 .agents/
+.build/
+CMakeLists.txt
