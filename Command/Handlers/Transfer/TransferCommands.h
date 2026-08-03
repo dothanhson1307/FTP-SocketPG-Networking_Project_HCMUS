@@ -7,10 +7,10 @@
 
 using std::string;
 
-string handleRetr(const std::vector<string>& args, ServerSession& session);
-string handleStor(const std::vector<string>& args, ServerSession& session);
-string handleAppe(const std::vector<string>& args, ServerSession& session);
+void handleRetr(const std::vector<string>& args, ServerSession& session);
+void handleStor(const std::vector<string>& args, ServerSession& session);
+void handleAppe(const std::vector<string>& args, ServerSession& session);
 
-string handleAbort(const std::vector<string>& args, ServerSession& session);
+void handleAbort(const std::vector<string>& args, ServerSession& session);
 
-string handleHash(const std::vector<string>& args, ServerSession& session);
+void handleHash(const std::vector<string>& args, ServerSession& session);

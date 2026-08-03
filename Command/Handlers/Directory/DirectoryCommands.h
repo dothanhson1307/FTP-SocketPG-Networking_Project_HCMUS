@@ -7,7 +7,8 @@
 
 using std::string;
 
-string handlePwd(const std::vector<string>& args, ServerSession& session);
-string handleCwd(const std::vector<string>& args, ServerSession& session);
-string handleMkd(const std::vector<string>& args, ServerSession& session);
-string handleRmd(const std::vector<string>& args, ServerSession& session);
+void handlePwd(const std::vector<string>& args, ServerSession& session);
+void handleCwd(const std::vector<string>& args, ServerSession& session);
+void handleMkd(const std::vector<string>& args, ServerSession& session);
+void handleRmd(const std::vector<string>& args, ServerSession& session);
+void handleCdup(const std::vector<string>& args, ServerSession& session);

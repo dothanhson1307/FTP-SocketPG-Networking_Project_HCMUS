@@ -69,13 +69,7 @@ void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddr
         commands = extractCommandTokens(pendingData);
 
         for (const auto& arguments : commands) {
-            string response = executeCommand(arguments, session);
-
-            if (!sendAll(clientFd, response)) {
-                running = false;
-                break;
-            }
-
+            executeCommand(arguments, session);
             if (session.quitRequested) {
                 running = false;
                 break;

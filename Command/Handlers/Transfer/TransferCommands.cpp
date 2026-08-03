@@ -21,13 +21,15 @@ static bool sendSessionReply(const ServerSession& session, const string& reply) 
     return sendAll(session.clientFd, reply);
 }
 
-string handleRetr(const std::vector<string>& args, ServerSession& session) {
+void handleRetr(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     if (!isLoggedIn(session)) {
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     std::filesystem::path filename = std::filesystem::path(args[1]).filename();
@@ -35,11 +37,12 @@ string handleRetr(const std::vector<string>& args, ServerSession& session) {
 
     std::error_code error;
     if (!std::filesystem::is_regular_file(fullPath, error) || error) {
-        return ftpFileUnavailable();
+        sendAll(session.clientFd, ftpFileUnavailable());
+        return;
     }
 
     if (!sendSessionReply(session, ftpOpeningDataConnection("RETR"))) {
-        return "";
+        return;
     }
 
     int targetPort = (session.dataPort > 0) ? session.dataPort : 8081;
@@ -56,23 +59,25 @@ string handleRetr(const std::vector<string>& args, ServerSession& session) {
         sizeof(targetUdpAddr)
     );
 
-    return ftpTransferComplete();
+    sendAll(session.clientFd, ftpTransferComplete());
 }
 
-string handleStor(const std::vector<string>& args, ServerSession& session) {
+void handleStor(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     if (!isLoggedIn(session)) {
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     std::filesystem::path filename = std::filesystem::path(args[1]).filename();
     std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
 
     if (!sendSessionReply(session, ftpOpeningDataConnection("STOR"))) {
-        return "";
+        return;
     }
 
     int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
@@ -81,17 +86,23 @@ string handleStor(const std::vector<string>& args, ServerSession& session) {
 
     rdtReceiveFile(fullPath.string(), listenPort, clientIp);
 
-    return ftpTransferComplete();
+    sendAll(session.clientFd, ftpTransferComplete());
 }
 
-string handleAppe(const std::vector<string>& args, ServerSession& session){
-    if(args.size()!=2) return ftpInvalidArguments();
-    if(!isLoggedIn(session)) return ftpNotLoggedIn();
+void handleAppe(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
+    }
+    if (!isLoggedIn(session)) {
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
+    }
     std::filesystem::path filename = std::filesystem::path(args[1]).filename();
     std::filesystem::path fullPath = std::filesystem::path("Repository/server_data/Appendables") / filename;
 
-    if(!sendSessionReply(session,ftpOpeningDataConnection("APPE"))){
-        return "";
+    if (!sendSessionReply(session, ftpOpeningDataConnection("APPE"))) {
+        return;
     }
     int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
     char clientIp[INET_ADDRSTRLEN]{};
@@ -99,21 +110,26 @@ string handleAppe(const std::vector<string>& args, ServerSession& session){
 
     rdtReceiveFile(fullPath.string(), listenPort, clientIp, true);
 
-    return ftpTransferComplete();
+    sendAll(session.clientFd, ftpTransferComplete());
 }
 
-
-string handleAbort(const std::vector<string>& args, ServerSession& session){
-
+void handleAbort(const std::vector<string>& args, ServerSession& session) {
+    if (!isLoggedIn(session)) {
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
+    }
+    sendAll(session.clientFd, ftpTransferAborted());
 }
 
-string handleHash(const std::vector<string>& args, ServerSession& session) {
+void handleHash(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     if (!isLoggedIn(session)) {
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     std::filesystem::path filename = std::filesystem::path(args[1]).filename();
@@ -121,8 +137,9 @@ string handleHash(const std::vector<string>& args, ServerSession& session) {
 
     string hashValue = calculateFileSHA256(fullPath.string());
     if (hashValue.empty()) {
-        return ftpFileUnavailable();
+        sendAll(session.clientFd, ftpFileUnavailable());
+        return;
     }
 
-    return ftpSha256(hashValue);
+    sendAll(session.clientFd, ftpSha256(hashValue));
 }

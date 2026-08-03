@@ -9,7 +9,7 @@
 using std::string;
 
 using CommandArguments = std::vector<string>;
-using CommandHandler = std::function<string(const CommandArguments&, ServerSession&)>;
+using CommandHandler = std::function<void(const CommandArguments&, ServerSession&)>;
 
 std::vector<CommandArguments> extractCommandTokens(string& pendingData);
-string executeCommand(const CommandArguments& args, ServerSession& session);
+void executeCommand(const CommandArguments& args, ServerSession& session);

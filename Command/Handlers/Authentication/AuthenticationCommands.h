@@ -7,6 +7,6 @@
 
 using std::string;
 
-string handleUser(const std::vector<string>& args, ServerSession& session);
-string handlePass(const std::vector<string>& args, ServerSession& session);
-string handleQuit(const std::vector<string>& args, ServerSession& session);
+void handleUser(const std::vector<string>& args, ServerSession& session);
+void handlePass(const std::vector<string>& args, ServerSession& session);
+void handleQuit(const std::vector<string>& args, ServerSession& session);

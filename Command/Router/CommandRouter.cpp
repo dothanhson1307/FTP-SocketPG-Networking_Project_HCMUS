@@ -5,6 +5,7 @@
 #include "../Handlers/Transfer/TransferCommands.h"
 #include "../Handlers/ModeDictator/DictateMode.h"
 #include "../../Helper/FtpReply.h"
+#include "../../Helper/SocketIO.h"
 
 #include <cctype>
 #include <sstream>
@@ -55,9 +56,9 @@ std::vector<CommandArguments> extractCommandTokens(string& pendingData) {
     return commands;
 }
 
-string executeCommand(const CommandArguments& args, ServerSession& session) {
+void executeCommand(const CommandArguments& args, ServerSession& session) {
     if (args.empty()) {
-        return "";
+        return;
     }
 
     static const std::unordered_map<string, CommandHandler> routes = {
@@ -69,6 +70,7 @@ string executeCommand(const CommandArguments& args, ServerSession& session) {
         {"CWD",  handleCwd},
         {"MKD",  handleMkd},
         {"RMD",  handleRmd},
+        {"CDUP", handleCdup},
         {"RETR", handleRetr},
         {"STOR", handleStor},
         {"APPE", handleAppe},
@@ -78,8 +80,9 @@ string executeCommand(const CommandArguments& args, ServerSession& session) {
 
     auto it = routes.find(args[0]);
     if (it != routes.end()) {
-        return it->second(args, session);
+        it->second(args, session);
+        return;
     }
 
-    return ftpCommandUnrecognized();
+    sendAll(session.clientFd, ftpCommandUnrecognized());
 }

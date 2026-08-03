@@ -1,5 +1,6 @@
 #include "DictateMode.h"
 #include "Helper/FtpReply.h"
+#include "Helper/SocketIO.h"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -43,12 +44,14 @@ int findAvailablePort() {
 
 }
 
-std::string handleActiveMode(const std::vector<std::string>& args, ServerSession& session) {
+void handleActiveMode(const std::vector<std::string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
     if (!session.loggedIn) {
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     std::stringstream ss(args[1]);
@@ -57,26 +60,31 @@ std::string handleActiveMode(const std::vector<std::string>& args, ServerSession
 
     while (std::getline(ss, token, ',')) {
         if (!isNumeric(token)) {
-            return ftpInvalidArguments();
+            sendAll(session.clientFd, ftpInvalidArguments());
+            return;
         }
         try {
             int val = std::stoi(token);
             if (val < 0 || val > 255) {
-                return ftpInvalidArguments();
+                sendAll(session.clientFd, ftpInvalidArguments());
+                return;
             }
             parts.push_back(val);
         } catch (...) {
-            return ftpInvalidArguments();
+            sendAll(session.clientFd, ftpInvalidArguments());
+            return;
         }
     }
 
     if (parts.size() != 6) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     int port = parts[4] * 256 + parts[5];
     if (port <= 0 || port > 65535) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     session.dataIp = std::to_string(parts[0]) + "." + std::to_string(parts[1]) + "." +
@@ -84,15 +92,17 @@ std::string handleActiveMode(const std::vector<std::string>& args, ServerSession
     session.dataPort = port;
     session.isPassiveMode = false;
 
-    return ftpCommandSuccessful("PORT command successful.");
+    sendAll(session.clientFd, ftpCommandSuccessful("PORT command successful."));
 }
 
-std::string handlePassiveMode(const std::vector<std::string>& args, ServerSession& session) {
+void handlePassiveMode(const std::vector<std::string>& args, ServerSession& session) {
     if (args.size() != 1) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
     if (!session.loggedIn) {
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     int passivePort = findAvailablePort();
@@ -122,5 +132,5 @@ std::string handlePassiveMode(const std::vector<std::string>& args, ServerSessio
     int p1 = passivePort / 256;
     int p2 = passivePort % 256;
 
-    return ftpPassiveMode(ipCommas, p1, p2);
+    sendAll(session.clientFd, ftpPassiveMode(ipCommas, p1, p2));
 }

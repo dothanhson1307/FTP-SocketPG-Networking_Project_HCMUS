@@ -1,5 +1,6 @@
 #include "AuthenticationCommands.h"
 #include "Helper/FtpReply.h"
+#include "Helper/SocketIO.h"
 #include <filesystem>
 #include <algorithm>
 
@@ -11,9 +12,10 @@ static bool isValidUser(const string& username) {
     return (lower == "son" || lower == "kiet");
 }
 
-string handleUser(const std::vector<string>& args, ServerSession& session) {
+void handleUser(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     const string& username = args[1];
@@ -21,28 +23,32 @@ string handleUser(const std::vector<string>& args, ServerSession& session) {
         session.username = username;
         session.usernameAccepted = true;
         session.loggedIn = false;
-        return ftpUsernameAccepted();
+        sendAll(session.clientFd, ftpUsernameAccepted());
+        return;
     }
 
     session.username.clear();
     session.usernameAccepted = false;
     session.loggedIn = false;
-    return ftpNotLoggedIn();
+    sendAll(session.clientFd, ftpNotLoggedIn());
 }
 
-string handlePass(const std::vector<string>& args, ServerSession& session) {
+void handlePass(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     if (!session.usernameAccepted || session.loggedIn) {
-        return ftpBadSequence();
+        sendAll(session.clientFd, ftpBadSequence());
+        return;
     }
 
     const string& password = args[1];
     if (password != "1234" && password != "son123" && password != "kiet123") {
         session.loggedIn = false;
-        return ftpNotLoggedIn();
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
     }
 
     std::filesystem::path userHome = std::filesystem::absolute(
@@ -57,14 +63,15 @@ string handlePass(const std::vector<string>& args, ServerSession& session) {
     session.loggedIn = true;
     session.homeDir = userHome;
     session.currentDir = ".";
-    return ftpLoginSuccessful();
+    sendAll(session.clientFd, ftpLoginSuccessful());
 }
 
-string handleQuit(const std::vector<string>& args, ServerSession& session) {
+void handleQuit(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 1) {
-        return ftpInvalidArguments();
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
     }
 
     session.quitRequested = true;
-    return ftpGoodbye();
+    sendAll(session.clientFd, ftpGoodbye());
 }
