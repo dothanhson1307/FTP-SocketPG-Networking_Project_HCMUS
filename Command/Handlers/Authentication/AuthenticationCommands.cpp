@@ -68,3 +68,11 @@ string handleQuit(const std::vector<string>& args, ServerSession& session) {
     session.quitRequested = true;
     return ftpGoodbye();
 }
+
+string handleNoop(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 1) {
+        return ftpInvalidArguments();
+    }
+
+    return ftpCommandSuccessful("NOOP successful; session remains active.");
+}
