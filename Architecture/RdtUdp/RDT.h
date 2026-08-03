@@ -14,7 +14,7 @@ using namespace std;
 
 uint16_t compute_checksum(const void *data, size_t len);
 
-void rdtReceiveFile(string filename, int port, const string& allowedIp = "");
+void rdtReceiveFile(string filename, int port, const string& allowedIp = "",const bool& isAppend = false);
 
 void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len);
 
