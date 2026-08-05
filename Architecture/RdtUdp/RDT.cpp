@@ -1,10 +1,11 @@
 #include "RDT.h"
+#include <atomic>
 
 uint16_t compute_checksum(const void *data, size_t len) {
     return calculateChecksum(data, len);
 }
 
-void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool& isAppend) {
+void rdtReceiveFile(string filename, int port, const string& allowedIp, const bool& isAppend, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -13,6 +14,11 @@ void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool&
 
     int opt = 1;
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 500000; // 500ms timeout
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     sockaddr_in server_addr{}, client_addr{};
     server_addr.sin_family = AF_INET;
@@ -25,13 +31,13 @@ void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool&
         return;
     }
 
-    if(!allowedIp.empty()) {
+    if (!allowedIp.empty()) {
         sockaddr_in expected_peer{};
         expected_peer.sin_family = AF_INET;
         inet_pton(AF_INET, allowedIp.c_str(), &expected_peer.sin_addr);
         connect(sockfd, (struct sockaddr*)&expected_peer, sizeof(expected_peer));
     }
-    std::ios::openmode openMode = std::ios::binary | ((isAppend) ? std::ios::app  : std::ios::trunc);
+    std::ios::openmode openMode = std::ios::binary | ((isAppend) ? std::ios::app : std::ios::trunc);
     ofstream file(filename, openMode);
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
@@ -39,16 +45,30 @@ void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool&
         return;
     }
 
-    cout << "[RDT Receiver] Listening for file payload on port "<< port << endl;
+    cout << "[RDT Receiver] Listening for file payload on port " << port << endl;
 
     socklen_t addr_len = sizeof(client_addr);
     char buffer[sizeof(RDTHeader) + MAX_PAYLOAD_SIZE];
     uint32_t expected_seq = 0;
 
+    if (isTransferring) isTransferring->store(true);
+    if (abortRequested) abortRequested->store(false);
+
     while (true) {
+        if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
+            cout << "[RDT Receiver] Transfer aborted by request." << endl;
+            break;
+        }
+
         ssize_t bytes_received = recvfrom(sockfd, buffer, sizeof(buffer), 0,
                                           (struct sockaddr*)&client_addr, &addr_len);
-        if (bytes_received <= 0) break;
+        if (bytes_received < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            break;
+        }
+        if (bytes_received == 0) break;
 
         RDTHeader* header = (RDTHeader*)buffer;
         char* payload = buffer + sizeof(RDTHeader);
@@ -87,11 +107,12 @@ void rdtReceiveFile(string filename,int port,const string& allowedIp,const bool&
         sendto(sockfd, &ack_pkt, sizeof(RDTHeader), 0, (struct sockaddr*)&client_addr, addr_len);
     }
 
+    if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
 }
 
-void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len) {
+void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -99,8 +120,8 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len) {
     }
 
     struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 500000; // 500ms timeout
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     ifstream file(filename, ios::binary);
@@ -113,7 +134,15 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len) {
     char data_buffer[MAX_PAYLOAD_SIZE];
     uint32_t seq_num = 0;
 
+    if (isTransferring) isTransferring->store(true);
+    if (abortRequested) abortRequested->store(false);
+
     while (file.read(data_buffer, sizeof(data_buffer)) || file.gcount() > 0) {
+        if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
+            cout << "[RDT Sender] Transfer aborted by request." << endl;
+            break;
+        }
+
         size_t bytes_read = file.gcount();
 
         char packet_buffer[sizeof(RDTHeader) + MAX_PAYLOAD_SIZE];
@@ -130,6 +159,11 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len) {
 
         bool ack_received = false;
         while (!ack_received) {
+            if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
+                cout << "[RDT Sender] Transfer aborted while awaiting ACK." << endl;
+                break;
+            }
+
             sendto(sockfd, packet_buffer, sizeof(RDTHeader) + bytes_read, 0,
                    (struct sockaddr*)&server_addr, addr_len);
 
@@ -144,16 +178,25 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len) {
                 }
             }
         }
+
+        if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
+            break;
+        }
     }
 
-    RDTHeader fin_hdr{};
-    fin_hdr.seq_num = seq_num;
-    fin_hdr.flags = FLAG_END;
-    fin_hdr.checksum = 0;
-    fin_hdr.checksum = calculateChecksum(&fin_hdr, sizeof(RDTHeader));
+    if ((!abortRequested || !abortRequested->load()) && (!isTransferring || isTransferring->load())) {
+        RDTHeader fin_hdr{};
+        fin_hdr.seq_num = seq_num;
+        fin_hdr.flags = FLAG_END;
+        fin_hdr.checksum = 0;
+        fin_hdr.checksum = calculateChecksum(&fin_hdr, sizeof(RDTHeader));
 
-    sendto(sockfd, &fin_hdr, sizeof(RDTHeader), 0, (struct sockaddr*)&server_addr, addr_len);
+        sendto(sockfd, &fin_hdr, sizeof(RDTHeader), 0, (struct sockaddr*)&server_addr, addr_len);
+    }
 
+    if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
 }
+
+

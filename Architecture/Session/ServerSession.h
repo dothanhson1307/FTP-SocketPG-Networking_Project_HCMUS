@@ -3,11 +3,16 @@
 #include <filesystem>
 #include <netinet/in.h>
 #include <string>
+#include <atomic>
+#include <shared_mutex>
 
 using std::string;
 
 struct ServerSession {
+    mutable std::shared_mutex sessionMutex;
+
     string username;
+
     bool usernameAccepted = false;
     bool loggedIn = false;
     bool quitRequested = false;
@@ -23,4 +28,7 @@ struct ServerSession {
     bool isPassiveMode = false;
     string dataIp = "";
     int dataPort = -1;
+
+    std::atomic_bool isTransferring{false};
+    std::atomic_bool abortRequested{false};
 };

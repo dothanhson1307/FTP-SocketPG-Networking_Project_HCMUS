@@ -28,6 +28,8 @@ string ftpOpeningDataConnection(const string& command);
 string ftpCannotOpenDataConnection();
 string ftpTransferAborted();
 string ftpTransferComplete();
+string ftpTransferAlreadyInProgress();
+
 
 string ftpCommandSuccessful(const string& message);
 string ftpPassiveMode(const string& ipCommas, int p1, int p2);

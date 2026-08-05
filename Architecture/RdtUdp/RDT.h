@@ -1,6 +1,7 @@
 #ifndef RDT_H
 #define RDT_H
 
+#include <atomic>
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -14,8 +15,11 @@ using namespace std;
 
 uint16_t compute_checksum(const void *data, size_t len);
 
-void rdtReceiveFile(string filename, int port, const string& allowedIp = "",const bool& isAppend = false);
+void rdtReceiveFile(string filename, int port, const string& allowedIp = "", const bool& isAppend = false, std::atomic_bool* isTransferring = nullptr, std::atomic_bool* abortRequested = nullptr);
 
-void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len);
+void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring = nullptr, std::atomic_bool* abortRequested = nullptr);
+
 
 #endif
+
+

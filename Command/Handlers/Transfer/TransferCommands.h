@@ -13,4 +13,3 @@ void handleAppe(const std::vector<string>& args, ServerSession& session);
 
 void handleAbort(const std::vector<string>& args, ServerSession& session);
 
-void handleHash(const std::vector<string>& args, ServerSession& session);

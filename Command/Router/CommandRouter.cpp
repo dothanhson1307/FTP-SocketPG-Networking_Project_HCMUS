@@ -4,8 +4,10 @@
 #include "../Handlers/Directory/DirectoryCommands.h"
 #include "../Handlers/Transfer/TransferCommands.h"
 #include "../Handlers/ModeDictator/DictateMode.h"
+#include "../Integrity/IntegrityCommands.h"
 #include "../../Helper/FtpReply.h"
 #include "../../Helper/SocketIO.h"
+
 
 #include <cctype>
 #include <sstream>
@@ -74,9 +76,11 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
         {"RETR", handleRetr},
         {"STOR", handleStor},
         {"APPE", handleAppe},
+        {"ABOR", handleAbort},
         {"HASH", handleHash},
         {"QUIT", handleQuit}
     };
+
 
     auto it = routes.find(args[0]);
     if (it != routes.end()) {

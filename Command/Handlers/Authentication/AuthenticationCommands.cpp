@@ -72,6 +72,12 @@ void handleQuit(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    session.quitRequested = true;
+    {
+        std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+        session.abortRequested.store(true);
+        session.quitRequested = true;
+    }
+
     sendAll(session.clientFd, ftpGoodbye());
 }
+

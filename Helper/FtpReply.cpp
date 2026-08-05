@@ -26,6 +26,8 @@ string ftpOpeningDataConnection(const string& command) { return "150 Opening UDP
 string ftpCannotOpenDataConnection() { return "425 Cannot open data connection!\r\n"; }
 string ftpTransferAborted() { return "426 Connection closed; transfer aborted.\r\n"; }
 string ftpTransferComplete() { return "226 Transfer complete.\r\n"; }
+string ftpTransferAlreadyInProgress() { return "450 Transfer already in progress.\r\n"; }
+
 
 string ftpCommandSuccessful(const string& message) { return "200 " + message + "\r\n"; }
 string ftpPassiveMode(const string& ipCommas, int p1, int p2) { return "227 Entering Passive Mode (" + ipCommas + "," + std::to_string(p1) + "," + std::to_string(p2) + ")\r\n"; }

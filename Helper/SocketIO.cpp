@@ -2,8 +2,12 @@
 
 #include <cstddef>
 #include <sys/socket.h>
+#include <mutex>
+
+static std::mutex mtx;
 
 bool sendAll(int socketFd, const std::string& message) {
+    std::lock_guard<std::mutex> lock(mtx);
     size_t totalSent = 0;
 
     while (totalSent < message.size()) {
@@ -20,6 +24,5 @@ bool sendAll(int socketFd, const std::string& message) {
 
         totalSent += static_cast<size_t>(sent);
     }
-
     return true;
 }

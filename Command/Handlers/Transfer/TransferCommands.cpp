@@ -1,13 +1,13 @@
 #include "TransferCommands.h"
 
 #include "Architecture/RdtUdp/RDT.h"
-#include "Command/Integrity/Hash.h"
 #include "Server/Server.h"
 #include "Helper/FtpReply.h"
 #include "Helper/SocketIO.h"
 
 #include <arpa/inet.h>
 #include <filesystem>
+#include <shared_mutex>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -27,13 +27,32 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    if (!isLoggedIn(session)) {
-        sendAll(session.clientFd, ftpNotLoggedIn());
+    if (session.isTransferring.load()) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
-    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
+    std::filesystem::path fullPath;
+    sockaddr_in targetUdpAddr{};
+
+    {
+        std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
+        if (!isLoggedIn(session)) {
+            sendAll(session.clientFd, ftpNotLoggedIn());
+            return;
+        }
+
+        std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        fullPath = session.homeDir / session.currentDir / filename;
+
+        int targetPort = (session.dataPort > 0) ? session.dataPort : 8081;
+        targetUdpAddr = session.clientAddress;
+
+        if (!session.isPassiveMode && !session.dataIp.empty()) {
+            inet_pton(AF_INET, session.dataIp.c_str(), &targetUdpAddr.sin_addr);
+        }
+        targetUdpAddr.sin_port = htons(targetPort);
+    }
 
     std::error_code error;
     if (!std::filesystem::is_regular_file(fullPath, error) || error) {
@@ -45,21 +64,19 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    int targetPort = (session.dataPort > 0) ? session.dataPort : 8081;
-    sockaddr_in targetUdpAddr = session.clientAddress;
-
-    if (!session.isPassiveMode && !session.dataIp.empty()) {
-        inet_pton(AF_INET, session.dataIp.c_str(), &targetUdpAddr.sin_addr);
-    }
-    targetUdpAddr.sin_port = htons(targetPort);
-
     rdtSendFile(
         fullPath.string(),
         targetUdpAddr,
-        sizeof(targetUdpAddr)
+        sizeof(targetUdpAddr),
+        &session.isTransferring,
+        &session.abortRequested
     );
 
-    sendAll(session.clientFd, ftpTransferComplete());
+    if (session.abortRequested.load()) {
+        sendAll(session.clientFd, ftpTransferAborted());
+    } else {
+        sendAll(session.clientFd, ftpTransferComplete());
+    }
 }
 
 void handleStor(const std::vector<string>& args, ServerSession& session) {
@@ -68,25 +85,40 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    if (!isLoggedIn(session)) {
-        sendAll(session.clientFd, ftpNotLoggedIn());
+    if (session.isTransferring.load()) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
-    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
+    std::filesystem::path fullPath;
+    int listenPort = 8081;
+    char clientIp[INET_ADDRSTRLEN]{};
+
+    {
+        std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
+        if (!isLoggedIn(session)) {
+            sendAll(session.clientFd, ftpNotLoggedIn());
+            return;
+        }
+
+        std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        fullPath = session.homeDir / session.currentDir / filename;
+
+        listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
+        inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+    }
 
     if (!sendSessionReply(session, ftpOpeningDataConnection("STOR"))) {
         return;
     }
 
-    int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
-    char clientIp[INET_ADDRSTRLEN]{};
-    inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+    rdtReceiveFile(fullPath.string(), listenPort, clientIp, false, &session.isTransferring, &session.abortRequested);
 
-    rdtReceiveFile(fullPath.string(), listenPort, clientIp);
-
-    sendAll(session.clientFd, ftpTransferComplete());
+    if (session.abortRequested.load()) {
+        sendAll(session.clientFd, ftpTransferAborted());
+    } else {
+        sendAll(session.clientFd, ftpTransferComplete());
+    }
 }
 
 void handleAppe(const std::vector<string>& args, ServerSession& session) {
@@ -94,23 +126,41 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
         sendAll(session.clientFd, ftpInvalidArguments());
         return;
     }
-    if (!isLoggedIn(session)) {
-        sendAll(session.clientFd, ftpNotLoggedIn());
+
+    if (session.isTransferring.load()) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
-    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-    std::filesystem::path fullPath = std::filesystem::path("Repository/server_data/Appendables") / filename;
+
+    std::filesystem::path fullPath;
+    int listenPort = 8081;
+    char clientIp[INET_ADDRSTRLEN]{};
+
+    {
+        std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
+        if (!isLoggedIn(session)) {
+            sendAll(session.clientFd, ftpNotLoggedIn());
+            return;
+        }
+
+        std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        fullPath = std::filesystem::path("Repository/server_data/Appendables") / filename;
+
+        listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
+        inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+    }
 
     if (!sendSessionReply(session, ftpOpeningDataConnection("APPE"))) {
         return;
     }
-    int listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
-    char clientIp[INET_ADDRSTRLEN]{};
-    inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
 
-    rdtReceiveFile(fullPath.string(), listenPort, clientIp, true);
+    rdtReceiveFile(fullPath.string(), listenPort, clientIp, true, &session.isTransferring, &session.abortRequested);
 
-    sendAll(session.clientFd, ftpTransferComplete());
+    if (session.abortRequested.load()) {
+        sendAll(session.clientFd, ftpTransferAborted());
+    } else {
+        sendAll(session.clientFd, ftpTransferComplete());
+    }
 }
 
 void handleAbort(const std::vector<string>& args, ServerSession& session) {
@@ -118,28 +168,13 @@ void handleAbort(const std::vector<string>& args, ServerSession& session) {
         sendAll(session.clientFd, ftpNotLoggedIn());
         return;
     }
+
+    if (!session.isTransferring.load()) {
+        sendAll(session.clientFd, "225 No transfer in progress.\r\n");
+        return;
+    }
+
+    session.abortRequested.store(true);
     sendAll(session.clientFd, ftpTransferAborted());
 }
 
-void handleHash(const std::vector<string>& args, ServerSession& session) {
-    if (args.size() != 2) {
-        sendAll(session.clientFd, ftpInvalidArguments());
-        return;
-    }
-
-    if (!isLoggedIn(session)) {
-        sendAll(session.clientFd, ftpNotLoggedIn());
-        return;
-    }
-
-    std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-    std::filesystem::path fullPath = session.homeDir / session.currentDir / filename;
-
-    string hashValue = calculateFileSHA256(fullPath.string());
-    if (hashValue.empty()) {
-        sendAll(session.clientFd, ftpFileUnavailable());
-        return;
-    }
-
-    sendAll(session.clientFd, ftpSha256(hashValue));
-}
