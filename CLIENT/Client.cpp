@@ -62,6 +62,8 @@ int main() {
     std::cout << response;
 
     while (true) {
+        response = "";
+        
         std::cout << "ftp> ";
 
         string command;
@@ -100,6 +102,8 @@ int main() {
         if (response.compare(0, 3, "221") == 0) {
             break;
         }
+
+        response = "";
     }
 
     close(clientFd);

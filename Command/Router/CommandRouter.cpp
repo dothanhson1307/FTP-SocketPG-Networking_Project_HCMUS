@@ -2,6 +2,7 @@
 
 #include "../Handlers/Authentication/AuthenticationCommands.h"
 #include "../Handlers/Directory/DirectoryCommands.h"
+#include "../Handlers/DirectoryInformation/DirectoryInformation.h"
 #include "../Handlers/Transfer/TransferCommands.h"
 #include "../Handlers/ModeDictator/DictateMode.h"
 #include "../Integrity/IntegrityCommands.h"
@@ -64,15 +65,23 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
     }
 
     static const std::unordered_map<string, CommandHandler> routes = {
-        {"PORT", handleActiveMode},
-        {"PASV", handlePassiveMode},
         {"USER", handleUser},
         {"PASS", handlePass},
+        {"NOOP", handleNoop},
+        {"QUIT", handleQuit},
+
+        {"PORT", handleActiveMode},
+        {"PASV", handlePassiveMode},
+        
+
         {"PWD",  handlePwd},
         {"CWD",  handleCwd},
         {"MKD",  handleMkd},
         {"RMD",  handleRmd},
         {"CDUP", handleCdup},
+
+        {"LIST", handleList},
+
         {"RETR", handleRetr},
         {"STOR", handleStor},
         {"APPE", handleAppe},
@@ -80,6 +89,7 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
         {"HASH", handleHash},
         {"QUIT", handleQuit}
     };
+
 
 
     auto it = routes.find(args[0]);
