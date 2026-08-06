@@ -3,6 +3,7 @@
 #include "Helper/SocketIO.h"
 #include <filesystem>
 #include <algorithm>
+#include <mutex>
 
 using std::string;
 

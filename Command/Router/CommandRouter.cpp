@@ -81,6 +81,10 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
         {"CDUP", handleCdup},
 
         {"LIST", handleList},
+        {"NLST", handleNlst},
+        {"STAT", handleStat},
+        {"SIZE", handleSize},
+        {"MDTM", handleMdtm},
 
         {"RETR", handleRetr},
         {"STOR", handleStor},
