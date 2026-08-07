@@ -1,9 +1,10 @@
 #include "TransferClient.h"
 
-#include "Client/Client.h"
+#include "Client/ClientHelper.h"
 #include "Architecture/RdtUdp/RDT.h"
 #include "Helper/SocketIO.h"
 #include "Helper/FtpReply.h"
+
 
 #include <arpa/inet.h>
 #include <cctype>
@@ -49,6 +50,7 @@ bool receiveReplyLine(
 }
 
 std::filesystem::path buildUserFilepath(
+
     const ClientSession& session,
     const string& rawFilename
 ) {
@@ -56,7 +58,28 @@ std::filesystem::path buildUserFilepath(
     return std::filesystem::path("Repository/user_data") / session.username / filename;
 }
 
+void ensurePassiveDataChannel(
+    int clientFd,
+    string& pendingData,
+    ClientSession& session
+) {
+    if (session.isPassiveMode && session.dataPort > 0) {
+        return;
+    }
+
+    if (!sendAll(clientFd, "PASV\r\n")) {
+        return;
+    }
+
+    string pasvResponse;
+    if (receiveLine(clientFd, pendingData, pasvResponse)) {
+        std::cout << pasvResponse;
+        updateSessionAfterReply("PASV", pasvResponse, session);
+    }
+}
+
 } // namespace
+
 
 bool handleTransferCommand(
     int clientFd,
@@ -86,11 +109,15 @@ bool handleTransferCommand(
             std::cout << ftpNotLoggedIn();
             return true;
         }
+
+        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+
         //send command for server to handle
         if (!sendAll(clientFd, rawLine + "\r\n")) {
             std::cerr << "[Client] Send failed.\n";
             return true;
         }
+
 
         string response;
         if (!receiveReplyLine(clientFd, pendingData, response)) {
@@ -131,10 +158,13 @@ bool handleTransferCommand(
             return true;
         }
 
+        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+
         if (!sendAll(clientFd, rawLine + "\r\n")) {
             std::cerr << "[Client] Send failed.\n";
             return true;
         }
+
 
         string response;
         if (!receiveReplyLine(clientFd, pendingData, response)) {

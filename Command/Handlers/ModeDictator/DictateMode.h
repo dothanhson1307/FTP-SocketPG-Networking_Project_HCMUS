@@ -11,4 +11,7 @@
  */
 void handleActiveMode(const std::vector<std::string>& args, ServerSession& session);
 void handlePassiveMode(const std::vector<std::string>& args, ServerSession& session);
+void handleType(const std::vector<std::string>& args, ServerSession& session);
+void handleMode(const std::vector<std::string>& args, ServerSession& session);
+
 

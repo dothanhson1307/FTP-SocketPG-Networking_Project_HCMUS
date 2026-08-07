@@ -24,11 +24,14 @@ struct ServerSession {
     sockaddr_in clientAddress{};
     int clientFd = -1;
 
-    //PORT va PASV tac dong
+    // Data Channel Mode & Type state
     bool isPassiveMode = false;
     string dataIp = "";
     int dataPort = -1;
+    char transferType = 'I'; // 'A' = ASCII, 'I' = Image/Binary
+    char transferMode = 'S'; // 'S' = Stream, 'B' = Block, 'C' = Compressed
 
     std::atomic_bool isTransferring{false};
     std::atomic_bool abortRequested{false};
 };
+
