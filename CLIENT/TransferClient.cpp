@@ -141,10 +141,11 @@ bool handleTransferCommand(
         return true;
     }
 
-    if (commandName == "STOR" || commandName == "APPE") {
-        if (arguments.size() != 2) {
+    if (commandName == "STOR" || commandName == "APPE" || commandName == "STOU") {
+        if (arguments.size() < 2 || arguments.size() > 2) {
             return false;
         }
+
 
         if (!session.loggedIn || session.username.empty()) {
             std::cout << ftpNotLoggedIn();

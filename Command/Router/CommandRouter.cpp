@@ -91,10 +91,12 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
         {"RETR", handleRetr},
         {"STOR", handleStor},
         {"APPE", handleAppe},
+        {"STOU", handleStou},
         {"ABOR", handleAbort},
         {"HASH", handleHash},
         {"QUIT", handleQuit}
     };
+
 
 
 
