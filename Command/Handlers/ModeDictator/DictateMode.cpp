@@ -134,3 +134,68 @@ void handlePassiveMode(const std::vector<std::string>& args, ServerSession& sess
 
     sendAll(session.clientFd, ftpPassiveMode(ipCommas, p1, p2));
 }
+
+void handleType(const std::vector<std::string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
+    }
+    if (!session.loggedIn) {
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
+    }
+
+    std::string typeArg = args[1];
+    for (char& c : typeArg) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (typeArg == "A" || typeArg == "ASCII") {
+        {
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.transferType = 'A';
+        }
+        sendAll(session.clientFd, "200 Type set to A.\r\n");
+    } else if (typeArg == "I" || typeArg == "IMAGE" || typeArg == "BINARY") {
+        {
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.transferType = 'I';
+        }
+        sendAll(session.clientFd, "200 Type set to I.\r\n");
+    } else {
+        sendAll(session.clientFd, ftpInvalidArguments());
+    }
+}
+
+void handleMode(const std::vector<std::string>& args, ServerSession& session) {
+    if (args.size() != 2) {
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
+    }
+    if (!session.loggedIn) {
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
+    }
+
+    std::string modeArg = args[1];
+    for (char& c : modeArg) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+
+    if (modeArg == "S" || modeArg == "STREAM") {
+        {
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.transferMode = 'S';
+        }
+        sendAll(session.clientFd, "200 Mode set to S.\r\n");
+    } else if (modeArg == "B" || modeArg == "BLOCK") {
+        {
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.transferMode = 'B';
+        }
+        sendAll(session.clientFd, "200 Mode set to B.\r\n");
+    } else if (modeArg == "C" || modeArg == "COMPRESSED") {
+        {
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.transferMode = 'C';
+        }
+        sendAll(session.clientFd, "200 Mode set to C.\r\n");
+    } else {
+        sendAll(session.clientFd, ftpInvalidArguments());
+    }
+}

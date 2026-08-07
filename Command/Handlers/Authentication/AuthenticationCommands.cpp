@@ -51,17 +51,26 @@ void handlePass(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    std::filesystem::path userHome = std::filesystem::absolute(
+    std::filesystem::path clientUserData = std::filesystem::absolute(
         std::filesystem::path("Repository/user_data") / session.username
     );
+    std::filesystem::path serverUploadedData = std::filesystem::absolute(
+        std::filesystem::path("Repository/server_data/uploaded_user_data") / session.username
+    );
+
     std::error_code error;
-    if (!std::filesystem::is_directory(userHome, error) || error) {
+    if (!std::filesystem::is_directory(clientUserData, error) || error) {
         error.clear();
-        std::filesystem::create_directories(userHome, error);
+        std::filesystem::create_directories(clientUserData, error);
+    }
+    if (!std::filesystem::is_directory(serverUploadedData, error) || error) {
+        error.clear();
+        std::filesystem::create_directories(serverUploadedData, error);
     }
 
     session.loggedIn = true;
-    session.homeDir = userHome;
+    session.homeDir = serverUploadedData;
+
     session.currentDir = ".";
     sendAll(session.clientFd, ftpLoginSuccessful());
 }

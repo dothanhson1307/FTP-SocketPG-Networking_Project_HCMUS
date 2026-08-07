@@ -72,7 +72,9 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
 
         {"PORT", handleActiveMode},
         {"PASV", handlePassiveMode},
-        
+        {"TYPE", handleType},
+        {"MODE", handleMode},
+
 
         {"PWD",  handlePwd},
         {"CWD",  handleCwd},

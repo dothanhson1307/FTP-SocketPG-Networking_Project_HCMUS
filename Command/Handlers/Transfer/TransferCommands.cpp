@@ -5,6 +5,7 @@
 #include "Helper/FtpReply.h"
 #include "Helper/SocketIO.h"
 
+#include <thread>
 #include <arpa/inet.h>
 #include <filesystem>
 #include <shared_mutex>
@@ -34,6 +35,7 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
 
     std::filesystem::path fullPath;
     sockaddr_in targetUdpAddr{};
+    char mode = 'S';
 
     {
         std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
@@ -43,10 +45,12 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         }
 
         std::filesystem::path filename = std::filesystem::path(args[1]).filename();
-        fullPath = session.homeDir / session.currentDir / filename;
+        fullPath = std::filesystem::path("Repository/server_data/Downloadable_files") / filename;
+
 
         int targetPort = (session.dataPort > 0) ? session.dataPort : 8081;
         targetUdpAddr = session.clientAddress;
+        mode = session.transferMode;
 
         if (!session.isPassiveMode && !session.dataIp.empty()) {
             inet_pton(AF_INET, session.dataIp.c_str(), &targetUdpAddr.sin_addr);
@@ -60,23 +64,20 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
+
     if (!sendSessionReply(session, ftpOpeningDataConnection("RETR"))) {
         return;
     }
-
-    rdtSendFile(
+    std::thread transferThread(
+        rdtSendFile,
         fullPath.string(),
         targetUdpAddr,
         sizeof(targetUdpAddr),
         &session.isTransferring,
-        &session.abortRequested
+        &session.abortRequested,
+        mode,session.clientFd
     );
-
-    if (session.abortRequested.load()) {
-        sendAll(session.clientFd, ftpTransferAborted());
-    } else {
-        sendAll(session.clientFd, ftpTransferComplete());
-    }
+    transferThread.detach();
 }
 
 void handleStor(const std::vector<string>& args, ServerSession& session) {
@@ -93,6 +94,7 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
     std::filesystem::path fullPath;
     int listenPort = 8081;
     char clientIp[INET_ADDRSTRLEN]{};
+    char mode = 'S';
 
     {
         std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
@@ -105,6 +107,7 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         fullPath = session.homeDir / session.currentDir / filename;
 
         listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
+        mode = session.transferMode;
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
     }
 
@@ -112,13 +115,13 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    rdtReceiveFile(fullPath.string(), listenPort, clientIp, false, &session.isTransferring, &session.abortRequested);
-
-    if (session.abortRequested.load()) {
-        sendAll(session.clientFd, ftpTransferAborted());
-    } else {
-        sendAll(session.clientFd, ftpTransferComplete());
-    }
+    std::thread transferThread(
+        rdtReceiveFile,
+        fullPath.string(),
+        listenPort, clientIp,
+        false, &session.isTransferring,
+        &session.abortRequested, mode,session.clientFd);
+    transferThread.detach();
 }
 
 void handleAppe(const std::vector<string>& args, ServerSession& session) {
@@ -135,6 +138,7 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
     std::filesystem::path fullPath;
     int listenPort = 8081;
     char clientIp[INET_ADDRSTRLEN]{};
+    char mode = 'S';
 
     {
         std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
@@ -147,6 +151,7 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
         fullPath = std::filesystem::path("Repository/server_data/Appendables") / filename;
 
         listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
+        mode = session.transferMode;
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
     }
 
@@ -154,13 +159,13 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    rdtReceiveFile(fullPath.string(), listenPort, clientIp, true, &session.isTransferring, &session.abortRequested);
-
-    if (session.abortRequested.load()) {
-        sendAll(session.clientFd, ftpTransferAborted());
-    } else {
-        sendAll(session.clientFd, ftpTransferComplete());
-    }
+    std::thread transferThread(
+        rdtReceiveFile,
+        fullPath.string(),
+        listenPort, clientIp, true,
+        &session.isTransferring,
+        &session.abortRequested, mode,session.clientFd);
+    transferThread.detach();
 }
 
 void handleAbort(const std::vector<string>& args, ServerSession& session) {
