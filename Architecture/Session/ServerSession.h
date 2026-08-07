@@ -28,8 +28,8 @@ struct ServerSession {
     bool isPassiveMode = false;
     string dataIp = "";
     int dataPort = -1;
-    char transferType = 'I'; // 'A' = ASCII, 'I' = Image/Binary
-    char transferMode = 'S'; // 'S' = Stream, 'B' = Block, 'C' = Compressed
+    char transferType = 'I'; 
+    char transferMode = 'S'; 
 
     std::atomic_bool isTransferring{false};
     std::atomic_bool abortRequested{false};
