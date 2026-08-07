@@ -1,4 +1,6 @@
 #include "RDT.h"
+#include "../../Helper/FtpReply.h"
+#include "../../Helper/SocketIO.h"
 #include <atomic>
 #include <vector>
 
@@ -62,7 +64,7 @@ size_t decompressRLE(const char* input, size_t inputLen, char* output, size_t ma
     return outIdx;
 }
 
-void rdtReceiveFile(string filename, int port, const string& allowedIp, const bool& isAppend, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode) {
+void rdtReceiveFile(string filename, int port, const string& allowedIp, const bool& isAppend, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode,int client_fd) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -183,9 +185,17 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
+
+    if (client_fd >= 0) {
+        if (abortRequested && abortRequested->load()) {
+            sendAll(client_fd, ftpTransferAborted());
+        } else {
+            sendAll(client_fd, ftpTransferComplete());
+        }
+    }
 }
 
-void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode) {
+void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode,int client_fd) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
@@ -289,4 +299,12 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, s
     if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
+
+    if (client_fd >= 0) {
+        if (abortRequested && abortRequested->load()) {
+            sendAll(client_fd, ftpTransferAborted());
+        } else {
+            sendAll(client_fd, ftpTransferComplete());
+        }
+    }
 }
