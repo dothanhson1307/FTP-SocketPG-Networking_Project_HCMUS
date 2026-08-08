@@ -33,5 +33,10 @@ struct ServerSession {
 
     std::atomic_bool isTransferring{false};
     std::atomic_bool abortRequested{false};
+
+    // when client sent RNFR, renamePending turn true - Waiting for RNTO
+    // if RNTO happend before RNFR --> error
+    bool renamePending = false;
+    std::filesystem::path renameSourcePath;
 };
 

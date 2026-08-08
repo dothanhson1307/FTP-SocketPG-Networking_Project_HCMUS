@@ -3,6 +3,7 @@
 #include "../Handlers/Authentication/AuthenticationCommands.h"
 #include "../Handlers/Directory/DirectoryCommands.h"
 #include "../Handlers/DirectoryInformation/DirectoryInformation.h"
+#include "../Handlers/FileOperation/FileOperationCommands.h"
 #include "../Handlers/Transfer/TransferCommands.h"
 #include "../Handlers/ModeDictator/DictateMode.h"
 #include "../Integrity/IntegrityCommands.h"
@@ -87,6 +88,10 @@ void executeCommand(const CommandArguments& args, ServerSession& session) {
         {"STAT", handleStat},
         {"SIZE", handleSize},
         {"MDTM", handleMdtm},
+
+        {"DELE", handleDele},
+        {"RNFR", handleRnfr},
+        {"RNTO", handleRnto},
 
         {"RETR", handleRetr},
         {"STOR", handleStor},

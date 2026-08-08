@@ -34,4 +34,8 @@ string ftpPassiveMode(const string& ipCommas, int p1, int p2) { return "227 Ente
 
 string ftpFileUnavailable() { return "550 File unavailable.\r\n"; }
 string ftpFileAlreadyExists() { return "550 File already exists.\r\n"; }
+string ftpFileDeleted() { return "250 File deleted successfully.\r\n"; }
+string ftpRenameReady() { return "350 File exists, ready for destination name.\r\n"; }
+string ftpRenameSuccessful() { return "250 Rename successful.\r\n"; }
+
 string ftpSha256(const string& digest) { return "213 " + digest + "\r\n"; }

@@ -36,4 +36,7 @@ string ftpPassiveMode(const string& ipCommas, int p1, int p2);
 
 string ftpFileUnavailable();
 string ftpFileAlreadyExists();
+string ftpFileDeleted();
+string ftpRenameReady();
+string ftpRenameSuccessful();
 string ftpSha256(const string& digest);
