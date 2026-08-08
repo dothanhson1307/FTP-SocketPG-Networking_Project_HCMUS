@@ -46,26 +46,23 @@ bool resolvePathInsideHome(
         ? fs::path(".")
         : fs::path(portableInput);
 
+    // check if it't abs dir or contain ../ in dir
     if (requestedPath.is_absolute() || containsParentDirectory(requestedPath)) {
         return false;
     }
 
+    // use weakly_canonical() to standardize a dir
     std::error_code error;
-    const fs::path canonicalHome = fs::weakly_canonical(homeDir, error);
+    const fs::path home = fs::weakly_canonical(homeDir, error);
     if (error) {
         return false;
     }
 
     const fs::path target = fs::weakly_canonical(
-        canonicalHome / currentDir / requestedPath,
+        home / currentDir / requestedPath,
         error
     );
     if (error) {
-        return false;
-    }
-
-    const fs::path relativeTarget = target.lexically_relative(canonicalHome);
-    if (relativeTarget.empty() || containsParentDirectory(relativeTarget)) {
         return false;
     }
 
