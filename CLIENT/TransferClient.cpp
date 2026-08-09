@@ -80,7 +80,11 @@ void ensurePassiveDataChannel(
     string& pendingData,
     ClientSession& session
 ) {
-    if (session.isPassiveMode && session.dataPort > 0) {
+    if (!session.isPassiveMode) {
+        return;
+    }
+
+    if (session.dataPort > 0) {
         return;
     }
 
@@ -143,9 +147,7 @@ bool handleTransferCommand(
             return true;
         }
 
-        if (session.isPassiveMode || session.dataPort < 0) {
-            ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
-        }
+        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
 
 
         //send command for server to handle
@@ -181,8 +183,14 @@ bool handleTransferCommand(
         mutableSession.abortRequested.store(false);
         mutableSession.isTransferring.store(true);
 
-        std::thread([savePath, port, ip, mode, &mutableSession]() {
+        std::thread([savePath, port, ip, mode, &mutableSession, clientFd, &pendingData]() {
             rdtReceiveFile(savePath.string(), port, ip, false, &mutableSession.isTransferring, &mutableSession.abortRequested, mode);
+            string completionReply;
+            if (receiveReplyLine(clientFd, pendingData, completionReply)) {
+                std::cout << "\r\033[K" << completionReply << "ftp> ";
+                std::cout.flush();
+            }
+
         }).detach();
 
         return true;
@@ -206,10 +214,7 @@ bool handleTransferCommand(
             return true;
         }
 
-        if (session.isPassiveMode || session.dataPort < 0) {
-            ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
-        }
-
+        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
 
         if (!sendAll(clientFd, rawLine + "\r\n")) {
             std::cerr << "[Client] Send failed.\n";
@@ -237,7 +242,7 @@ bool handleTransferCommand(
         mutableSession.abortRequested.store(false);
         mutableSession.isTransferring.store(true);
 
-        std::thread([uploadPath, serverUdpAddress, mode, &mutableSession]() {
+        std::thread([uploadPath, serverUdpAddress, mode, &mutableSession, clientFd, &pendingData]() {
             rdtSendFile(
                 uploadPath.string(),
                 serverUdpAddress,
@@ -246,6 +251,13 @@ bool handleTransferCommand(
                 &mutableSession.abortRequested,
                 mode
             );
+            string completionReply;
+            if (receiveReplyLine(clientFd, pendingData, completionReply)) {
+                //\r jump to front 033 notify next is screen command,[K erase from cursor to end of the line
+                std::cout << "\r\033[K" << completionReply << "ftp> ";
+                std::cout.flush();
+            }
+
         }).detach();
 
         return true;
@@ -253,3 +265,4 @@ bool handleTransferCommand(
 
     return false;
 }
+
