@@ -40,7 +40,7 @@ void handleList(const std::vector<string>& args, ServerSession& session) {
     }
 
     // [Type][Perms] [Size] [Name]
-    string respone;
+    string response;
     // loop through all level 1 files or folders in target directory
     // auto == std::filesystem::directory_entry not std::filesystem::path
     for(const auto& entry : std::filesystem::directory_iterator(target)) {
@@ -58,10 +58,18 @@ void handleList(const std::vector<string>& args, ServerSession& session) {
 
         name  = entry.path().filename().string();
         // tam thoi bo qua permission
-        respone += type + " " + size + " bytes " + name + "\r\n";
+        response += type + " " + size + " bytes " + name + "\r\n";
     }
 
-    sendAll(session.clientFd, respone);
+    // A directory can be empty.  In that case `response` is empty and no byte
+    // would be sent, leaving the client blocked while it waits for a reply.
+    if (response.empty()) {
+        response = "226 Directory is empty.\r\n";
+    } else {
+        response += "226 Directory listing complete.\r\n";
+    }
+
+    sendAll(session.clientFd, response);
 }
 
 void handleNlst(const std::vector<string>& args, ServerSession& session) {
