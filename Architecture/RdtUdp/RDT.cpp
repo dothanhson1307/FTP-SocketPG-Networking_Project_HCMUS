@@ -12,8 +12,17 @@ namespace {
 void finishTransfer(
     std::atomic_bool* isTransferring,
     int clientFd,
-    const string& reply
+    const string& reply,
+    bool completed,
+    const TransferCompletionCallback& onCompleted
 ) {
+    // Run the callback before clearing the active flag.  Server.cpp waits on
+    // that flag before destroying its session, so this keeps captured session
+    // data valid while a verification record is being stored.
+    if (onCompleted) {
+        onCompleted(completed);
+    }
+
     if (isTransferring) {
         isTransferring->store(false);
     }
@@ -89,11 +98,11 @@ size_t decompressRLE(const char* input, size_t inputLen, char* output, size_t ma
     return outIdx;
 }
 
-void rdtReceiveFile(string filename, int port, const string& allowedIp, const bool& isAppend, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode,int client_fd) {
+void rdtReceiveFile(string filename, int port, const string& allowedIp, const bool& isAppend, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode, int client_fd, TransferCompletionCallback onCompleted) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
-        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection(), false, onCompleted);
         return;
     }
 
@@ -113,7 +122,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     if (::bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(sockfd);
-        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection(), false, onCompleted);
         return;
     }
 
@@ -136,7 +145,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
         close(sockfd);
-        finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
+        finishTransfer(isTransferring, client_fd, ftpFileUnavailable(), false, onCompleted);
         return;
     }
 
@@ -226,7 +235,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
         // in "<filename>.part" so it is clearly marked as incomplete.  APPE
         // writes directly to its destination, therefore its appended bytes
         // are also intentionally kept.
-        finishTransfer(isTransferring, client_fd, ftpTransferAborted());
+        finishTransfer(isTransferring, client_fd, ftpTransferAborted(), false, onCompleted);
         return;
     }
 
@@ -234,19 +243,19 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
         fs::rename(writePath, destination, fileError);
         if (fileError) {
             fs::remove(writePath, fileError);
-            finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
+            finishTransfer(isTransferring, client_fd, ftpFileUnavailable(), false, onCompleted);
             return;
         }
     }
 
-    finishTransfer(isTransferring, client_fd, ftpTransferComplete());
+    finishTransfer(isTransferring, client_fd, ftpTransferComplete(), true, onCompleted);
 }
 
-void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode,int client_fd) {
+void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode, int client_fd, TransferCompletionCallback onCompleted) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
-        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection(), false, onCompleted);
         return;
     }
 
@@ -259,7 +268,7 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, s
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
         close(sockfd);
-        finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
+        finishTransfer(isTransferring, client_fd, ftpFileUnavailable(), false, onCompleted);
         return;
     }
 
@@ -348,6 +357,8 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, s
     finishTransfer(
         isTransferring,
         client_fd,
-        wasAborted(abortRequested) ? ftpTransferAborted() : ftpTransferComplete()
+        wasAborted(abortRequested) ? ftpTransferAborted() : ftpTransferComplete(),
+        !wasAborted(abortRequested),
+        onCompleted
     );
 }

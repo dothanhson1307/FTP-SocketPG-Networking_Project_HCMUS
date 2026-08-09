@@ -1,6 +1,7 @@
 #include "TransferCommands.h"
 
 #include "Architecture/RdtUdp/RDT.h"
+#include "Command/Integrity/Hash.h"
 #include "Server/Server.h"
 #include "Helper/FtpReply.h"
 #include "Helper/SocketIO.h"
@@ -8,6 +9,7 @@
 #include <thread>
 #include <arpa/inet.h>
 #include <filesystem>
+#include <mutex>
 #include <shared_mutex>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -47,6 +49,7 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
     }
 
     std::filesystem::path fullPath;
+    string requestedFilename;
     sockaddr_in targetUdpAddr{};
     char mode = 'S';
 
@@ -58,6 +61,7 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         }
 
         std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        requestedFilename = filename.string();
         fullPath = std::filesystem::path("Repository/server_data/Downloadable_files") / filename;
 
 
@@ -73,6 +77,12 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
 
     std::error_code error;
     if (!std::filesystem::is_regular_file(fullPath, error) || error) {
+        sendAll(session.clientFd, ftpFileUnavailable());
+        return;
+    }
+
+    const string sourceHash = calculateFileSHA256(fullPath.string());
+    if (sourceHash.empty()) {
         sendAll(session.clientFd, ftpFileUnavailable());
         return;
     }
@@ -93,7 +103,16 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         sizeof(targetUdpAddr),
         &session.isTransferring,
         &session.abortRequested,
-        mode,session.clientFd
+        mode,
+        session.clientFd,
+        [&session, requestedFilename, sourceHash](bool completed) {
+            if (!completed) {
+                return;
+            }
+
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.retrSourceHashes[requestedFilename] = sourceHash;
+        }
     );
     transferThread.detach();
 }
@@ -105,6 +124,7 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
     }
 
     std::filesystem::path fullPath;
+    string storedFilename;
     int listenPort = 8081;
     char clientIp[INET_ADDRSTRLEN]{};
     char mode = 'S';
@@ -117,6 +137,7 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         }
 
         std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        storedFilename = filename.string();
         fullPath = session.homeDir / session.currentDir / filename;
 
         listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
@@ -139,7 +160,18 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         fullPath.string(),
         listenPort, clientIp,
         false, &session.isTransferring,
-        &session.abortRequested, mode,session.clientFd);
+        &session.abortRequested, mode, session.clientFd,
+        [&session, storedFilename](bool completed) {
+            if (!completed) {
+                return;
+            }
+
+            // HASH <filename> always verifies the most recent successful
+            // transfer for that filename.  A completed STOR replaces any
+            // earlier RETR verification context with the server-side file.
+            std::unique_lock<std::shared_mutex> lock(session.sessionMutex);
+            session.retrSourceHashes.erase(storedFilename);
+        });
     transferThread.detach();
 }
 
@@ -184,7 +216,8 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
         fullPath.string(),
         listenPort, clientIp, true,
         &session.isTransferring,
-        &session.abortRequested, mode,session.clientFd);
+        &session.abortRequested, mode, session.clientFd,
+        TransferCompletionCallback{});
     transferThread.detach();
 }
 
@@ -265,8 +298,7 @@ void handleStou(const std::vector<string>& args, ServerSession& session) {
         fullPath.string(),
         listenPort, clientIp, false,
         &session.isTransferring,
-        &session.abortRequested, mode, session.clientFd);
+        &session.abortRequested, mode, session.clientFd,
+        TransferCompletionCallback{});
     transferThread.detach();
 }
-
-

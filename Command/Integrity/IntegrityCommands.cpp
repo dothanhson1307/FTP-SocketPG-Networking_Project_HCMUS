@@ -21,6 +21,7 @@ void handleHash(const std::vector<string>& args, ServerSession& session) {
     }
 
     std::filesystem::path fullPath;
+    string retrSourceHash;
     {
         std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
         if (!isLoggedIn(session)) {
@@ -29,7 +30,19 @@ void handleHash(const std::vector<string>& args, ServerSession& session) {
         }
 
         std::filesystem::path filename = std::filesystem::path(args[1]).filename();
+        const auto cachedHash = session.retrSourceHashes.find(filename.string());
+        if (cachedHash != session.retrSourceHashes.end()) {
+            retrSourceHash = cachedHash->second;
+        }
+
         fullPath = session.homeDir / session.currentDir / filename;
+    }
+
+    // A successful RETR stores the source hash because that source lives in
+    // Downloadable_files, outside the normal user home directory.
+    if (!retrSourceHash.empty()) {
+        sendAll(session.clientFd, "213 RETR-PRE " + retrSourceHash + "\r\n");
+        return;
     }
 
     string hashValue = calculateFileSHA256(fullPath.string());

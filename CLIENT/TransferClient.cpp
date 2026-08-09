@@ -2,6 +2,7 @@
 
 #include "Client/ClientHelper.h"
 #include "Architecture/RdtUdp/RDT.h"
+#include "Command/Integrity/Hash.h"
 #include "Helper/SocketIO.h"
 #include "Helper/FtpReply.h"
 
@@ -33,6 +34,43 @@ std::vector<string> parseCommandTokens(const string& rawLine) {
 
 bool startsWithCode(const string& responseLine, const string& replyCode) {
     return responseLine.rfind(replyCode, 0) == 0;
+}
+
+string fileKey(const string& rawFilename) {
+    return std::filesystem::path(rawFilename).filename().string();
+}
+
+string extractReplyValue(const string& response) {
+    if (response.size() < 4) {
+        return "";
+    }
+
+    const size_t end = response.find_first_of("\r\n", 4);
+    return response.substr(4, end == string::npos ? string::npos : end - 4);
+}
+
+string parseStouFilename(const string& response) {
+    constexpr const char* prefix = "150 FILE: ";
+    if (response.rfind(prefix, 0) != 0) {
+        return "";
+    }
+
+    const size_t start = std::char_traits<char>::length(prefix);
+    const size_t end = response.find_first_of("\r\n", start);
+    return response.substr(start, end == string::npos ? string::npos : end - start);
+}
+
+void printVerificationResult(
+    const string& sourceLabel,
+    const string& sourceHash,
+    const string& destinationLabel,
+    const string& destinationHash
+) {
+    std::cout << sourceLabel << ": " << sourceHash << "\n";
+    std::cout << destinationLabel << ": " << destinationHash << "\n";
+    std::cout << "End-to-end verification: "
+              << (sourceHash == destinationHash ? "MATCH" : "MISMATCH")
+              << "\n";
 }
 
 bool receiveReplyLine(
@@ -126,15 +164,111 @@ bool handleTransferCommand(
         // The client has its own RDT thread.  Stop it as well as asking the
         // server to stop its thread; otherwise a receiver keeps waiting or a
         // sender keeps retrying packets after the server has aborted.
-        if (arguments.size() == 1) {
-            ClientSession& mutableSession = const_cast<ClientSession&>(session);
-            if (mutableSession.isTransferring.load()) {
-                mutableSession.abortRequested.store(true);
-            }
+        if (arguments.size() != 1) {
+            return false;
         }
 
-        // Let Client.cpp send ABOR and wait for the server's final reply.
+        ClientSession& mutableSession = const_cast<ClientSession&>(session);
+        if (mutableSession.isTransferring.load()) {
+            mutableSession.abortRequested.store(true);
+            if (!sendAll(clientFd, rawLine + "\r\n")) {
+                std::cerr << "[Client] Send failed.\n";
+            }
+
+            // The transfer worker already owns the next control reply and
+            // will print the final 426 after UDP has stopped.
+            return true;
+        }
+
+        if (mutableSession.completionReplyPending.load()) {
+            std::cout << "450 Transfer is finalizing. Wait for its reply.\r\n";
+            return true;
+        }
+
+        // With no transfer worker, Client.cpp can send ABOR and read the
+        // normal 225 reply itself.
         return false;
+    }
+
+    if (commandName == "HASH") {
+        if (arguments.size() != 2) {
+            return false;
+        }
+
+        if (!session.loggedIn || session.username.empty()) {
+            return false;
+        }
+
+        ClientSession& mutableSession = const_cast<ClientSession&>(session);
+        if (mutableSession.isTransferring.load()
+            || mutableSession.completionReplyPending.load()) {
+            std::cout << "450 Transfer is still in progress. Try HASH after 226.\r\n";
+            return true;
+        }
+
+        if (!sendAll(clientFd, rawLine + "\r\n")) {
+            std::cerr << "[Client] Send failed.\n";
+            return true;
+        }
+
+        string response;
+        if (!receiveReplyLine(clientFd, pendingData, response)) {
+            std::cerr << "[Client] Cannot receive HASH reply.\n";
+            return true;
+        }
+
+        const string key = fileKey(arguments[1]);
+        if (response.rfind("213 RETR-PRE ", 0) == 0) {
+            const string serverPreHash = response.substr(
+                std::char_traits<char>::length("213 RETR-PRE "),
+                64
+            );
+            const string clientPostHash = calculateFileSHA256(
+                buildUserFilepath(session, key).string()
+            );
+
+            if (clientPostHash.empty()) {
+                std::cout << "End-to-end verification: local file is unavailable.\n";
+            } else {
+                printVerificationResult(
+                    "Server pre-transfer SHA-256",
+                    serverPreHash,
+                    "Client post-transfer SHA-256",
+                    clientPostHash
+                );
+            }
+            return true;
+        }
+
+        if (startsWithCode(response, "213")) {
+            string clientPreHash;
+            {
+                std::lock_guard<std::mutex> lock(mutableSession.verificationMutex);
+                const auto savedHash = mutableSession.uploadSourceHashes.find(key);
+                if (savedHash != mutableSession.uploadSourceHashes.end()) {
+                    clientPreHash = savedHash->second;
+                }
+            }
+
+            if (!clientPreHash.empty()) {
+                printVerificationResult(
+                    "Client pre-transfer SHA-256",
+                    clientPreHash,
+                    "Server post-transfer SHA-256",
+                    extractReplyValue(response)
+                );
+            } else {
+                // Keep the normal HASH behavior when this filename was not
+                // uploaded by this client during the current session.
+                std::cout << response;
+            }
+
+            return true;
+        }
+
+        // Server errors (for example 550) are still useful to show directly.
+        std::cout << response;
+        return true;
     }
 
     if (commandName == "RETR") {
@@ -182,6 +316,7 @@ bool handleTransferCommand(
 
         mutableSession.abortRequested.store(false);
         mutableSession.isTransferring.store(true);
+        mutableSession.completionReplyPending.store(true);
 
         std::thread([savePath, port, ip, mode, &mutableSession, clientFd, &pendingData]() {
             rdtReceiveFile(savePath.string(), port, ip, false, &mutableSession.isTransferring, &mutableSession.abortRequested, mode);
@@ -190,6 +325,7 @@ bool handleTransferCommand(
                 std::cout << "\r\033[K" << completionReply << "ftp> ";
                 std::cout.flush();
             }
+            mutableSession.completionReplyPending.store(false);
 
         }).detach();
 
@@ -214,6 +350,15 @@ bool handleTransferCommand(
             return true;
         }
 
+        const bool shouldVerifyUpload = commandName == "STOR" || commandName == "STOU";
+        const string clientPreHash = shouldVerifyUpload
+            ? calculateFileSHA256(uploadPath.string())
+            : "";
+        if (shouldVerifyUpload && clientPreHash.empty()) {
+            std::cout << ftpFileUnavailable();
+            return true;
+        }
+
         ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
 
         if (!sendAll(clientFd, rawLine + "\r\n")) {
@@ -233,6 +378,14 @@ bool handleTransferCommand(
             return true;
         }
 
+        string remoteFilename = fileKey(arguments[1]);
+        if (commandName == "STOU") {
+            remoteFilename = parseStouFilename(response);
+            if (remoteFilename.empty()) {
+                std::cout << "[Client] Cannot determine STOU filename for verification.\n";
+            }
+        }
+
         sockaddr_in serverUdpAddress = serverAddress;
         serverUdpAddress.sin_port = htons(session.dataPort);
 
@@ -241,8 +394,10 @@ bool handleTransferCommand(
 
         mutableSession.abortRequested.store(false);
         mutableSession.isTransferring.store(true);
+        mutableSession.completionReplyPending.store(true);
 
-        std::thread([uploadPath, serverUdpAddress, mode, &mutableSession, clientFd, &pendingData]() {
+        std::thread([uploadPath, serverUdpAddress, mode, &mutableSession, clientFd, &pendingData,
+                     shouldVerifyUpload, remoteFilename, clientPreHash]() {
             rdtSendFile(
                 uploadPath.string(),
                 serverUdpAddress,
@@ -256,7 +411,15 @@ bool handleTransferCommand(
                 //\r jump to front 033 notify next is screen command,[K erase from cursor to end of the line
                 std::cout << "\r\033[K" << completionReply << "ftp> ";
                 std::cout.flush();
+
+                if (shouldVerifyUpload
+                    && !remoteFilename.empty()
+                    && startsWithCode(completionReply, "226")) {
+                    std::lock_guard<std::mutex> lock(mutableSession.verificationMutex);
+                    mutableSession.uploadSourceHashes[remoteFilename] = clientPreHash;
+                }
             }
+            mutableSession.completionReplyPending.store(false);
 
         }).detach();
 
@@ -265,4 +428,3 @@ bool handleTransferCommand(
 
     return false;
 }
-

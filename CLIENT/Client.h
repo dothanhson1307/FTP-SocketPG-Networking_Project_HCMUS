@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 using std::string;
 
@@ -24,6 +26,12 @@ struct ClientSession {
 
     std::atomic_bool isTransferring{false};
     std::atomic_bool abortRequested{false};
+    std::atomic_bool completionReplyPending{false};
+
+    // SHA-256 of the local source used by successful STOR/STOU commands.
+    // The key is the filename stored on the server.
+    std::mutex verificationMutex;
+    std::unordered_map<string, string> uploadSourceHashes;
 
     void reset() {
         username.clear();
@@ -35,6 +43,9 @@ struct ClientSession {
         transferMode = 'S';
         isTransferring.store(false);
         abortRequested.store(false);
+        completionReplyPending.store(false);
+        std::lock_guard<std::mutex> lock(verificationMutex);
+        uploadSourceHashes.clear();
     }
 };
 
