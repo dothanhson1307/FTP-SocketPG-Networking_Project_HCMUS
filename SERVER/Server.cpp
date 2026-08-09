@@ -6,6 +6,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <chrono>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -75,6 +76,14 @@ void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddr
                 break;
             }
         }
+    }
+
+    // RDT workers receive pointers to this session's transfer flags.  Ask an
+    // active worker to stop and wait for it before this stack-allocated
+    // session is destroyed, preventing it from using dangling pointers.
+    session.abortRequested.store(true);
+    while (session.isTransferring.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     close(clientFd);

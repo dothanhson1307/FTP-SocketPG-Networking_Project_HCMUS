@@ -22,14 +22,27 @@ static bool sendSessionReply(const ServerSession& session, const string& reply) 
     return sendAll(session.clientFd, reply);
 }
 
+// Mark the transfer as active before creating its thread.  This prevents a
+// second transfer (or ABOR) from seeing a short period where no transfer is
+// reported even though the server has already accepted one.
+static bool beginTransfer(ServerSession& session) {
+    bool expected = false;
+    if (!session.isTransferring.compare_exchange_strong(expected, true)) {
+        return false;
+    }
+
+    session.abortRequested.store(false);
+    return true;
+}
+
+static void cancelTransferStart(ServerSession& session) {
+    session.abortRequested.store(false);
+    session.isTransferring.store(false);
+}
+
 void handleRetr(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         sendAll(session.clientFd, ftpInvalidArguments());
-        return;
-    }
-
-    if (session.isTransferring.load()) {
-        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
@@ -64,8 +77,13 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
+    if (!beginTransfer(session)) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
+        return;
+    }
 
     if (!sendSessionReply(session, ftpOpeningDataConnection("RETR"))) {
+        cancelTransferStart(session);
         return;
     }
     std::thread transferThread(
@@ -83,11 +101,6 @@ void handleRetr(const std::vector<string>& args, ServerSession& session) {
 void handleStor(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         sendAll(session.clientFd, ftpInvalidArguments());
-        return;
-    }
-
-    if (session.isTransferring.load()) {
-        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
@@ -111,7 +124,13 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
     }
 
+    if (!beginTransfer(session)) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
+        return;
+    }
+
     if (!sendSessionReply(session, ftpOpeningDataConnection("STOR"))) {
+        cancelTransferStart(session);
         return;
     }
 
@@ -127,11 +146,6 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
 void handleAppe(const std::vector<string>& args, ServerSession& session) {
     if (args.size() != 2) {
         sendAll(session.clientFd, ftpInvalidArguments());
-        return;
-    }
-
-    if (session.isTransferring.load()) {
-        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
@@ -155,7 +169,13 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
     }
 
+    if (!beginTransfer(session)) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
+        return;
+    }
+
     if (!sendSessionReply(session, ftpOpeningDataConnection("APPE"))) {
+        cancelTransferStart(session);
         return;
     }
 
@@ -169,6 +189,11 @@ void handleAppe(const std::vector<string>& args, ServerSession& session) {
 }
 
 void handleAbort(const std::vector<string>& args, ServerSession& session) {
+    if (args.size() != 1) {
+        sendAll(session.clientFd, ftpInvalidArguments());
+        return;
+    }
+
     if (!isLoggedIn(session)) {
         sendAll(session.clientFd, ftpNotLoggedIn());
         return;
@@ -180,17 +205,14 @@ void handleAbort(const std::vector<string>& args, ServerSession& session) {
     }
 
     session.abortRequested.store(true);
-    sendAll(session.clientFd, ftpTransferAborted());
+    // The RDT worker sends the only final 426 reply after it has actually
+    // closed the UDP transfer.  Sending one here as well caused duplicate
+    // replies on the control connection.
 }
 
 void handleStou(const std::vector<string>& args, ServerSession& session) {
     if (args.size() < 1 || args.size() > 2) {
         sendAll(session.clientFd, ftpInvalidArguments());
-        return;
-    }
-
-    if (session.isTransferring.load()) {
-        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
         return;
     }
 
@@ -227,8 +249,14 @@ void handleStou(const std::vector<string>& args, ServerSession& session) {
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
     }
 
+    if (!beginTransfer(session)) {
+        sendAll(session.clientFd, ftpTransferAlreadyInProgress());
+        return;
+    }
+
     string reply = "150 FILE: " + uniqueFilename + "\r\n";
     if (!sendSessionReply(session, reply)) {
+        cancelTransferStart(session);
         return;
     }
 
@@ -240,6 +268,5 @@ void handleStou(const std::vector<string>& args, ServerSession& session) {
         &session.abortRequested, mode, session.clientFd);
     transferThread.detach();
 }
-
 
 

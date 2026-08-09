@@ -2,7 +2,32 @@
 #include "../../Helper/FtpReply.h"
 #include "../../Helper/SocketIO.h"
 #include <atomic>
+#include <filesystem>
 #include <vector>
+
+namespace fs = std::filesystem;
+
+namespace {
+
+void finishTransfer(
+    std::atomic_bool* isTransferring,
+    int clientFd,
+    const string& reply
+) {
+    if (isTransferring) {
+        isTransferring->store(false);
+    }
+
+    if (clientFd >= 0) {
+        sendAll(clientFd, reply);
+    }
+}
+
+bool wasAborted(const std::atomic_bool* abortRequested) {
+    return abortRequested && abortRequested->load();
+}
+
+} // anonymous namespace
 
 uint16_t compute_checksum(const void *data, size_t len) {
     return calculateChecksum(data, len);
@@ -68,6 +93,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
         return;
     }
 
@@ -87,6 +113,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     if (::bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("Bind failed");
         close(sockfd);
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
         return;
     }
 
@@ -96,11 +123,20 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
         inet_pton(AF_INET, allowedIp.c_str(), &expected_peer.sin_addr);
         connect(sockfd, (struct sockaddr*)&expected_peer, sizeof(expected_peer));
     }
-    std::ios::openmode openMode = std::ios::binary | ((isAppend) ? std::ios::app : std::ios::trunc);
-    ofstream file(filename, openMode);
+    const fs::path destination(filename);
+    const fs::path writePath = isAppend ? destination : fs::path(filename + ".part");
+    std::error_code fileError;
+    if (!isAppend) {
+        fs::remove(writePath, fileError);
+        fileError.clear();
+    }
+
+    std::ios::openmode openMode = std::ios::binary | (isAppend ? std::ios::app : std::ios::trunc);
+    ofstream file(writePath, openMode);
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
         close(sockfd);
+        finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
         return;
     }
 
@@ -110,8 +146,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
     char buffer[sizeof(RDTHeader) + MAX_PAYLOAD_SIZE];
     uint32_t expected_seq = 0;
 
-    if (isTransferring) isTransferring->store(true);
-    if (abortRequested) abortRequested->store(false);
+    bool completed = false;
 
     while (true) {
         if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
@@ -148,6 +183,7 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
             ack_pkt.checksum = 0;
             ack_pkt.checksum = calculateChecksum(&ack_pkt, sizeof(RDTHeader));
             sendto(sockfd, &ack_pkt, sizeof(RDTHeader), 0, (struct sockaddr*)&client_addr, addr_len);
+            completed = true;
             break;
         }
 
@@ -182,23 +218,35 @@ void rdtReceiveFile(string filename, int port, const string& allowedIp, const bo
         sendto(sockfd, &ack_pkt, sizeof(RDTHeader), 0, (struct sockaddr*)&client_addr, addr_len);
     }
 
-    if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
 
-    if (client_fd >= 0) {
-        if (abortRequested && abortRequested->load()) {
-            sendAll(client_fd, ftpTransferAborted());
-        } else {
-            sendAll(client_fd, ftpTransferComplete());
+    if (wasAborted(abortRequested) || !completed) {
+        // Keep data that has already arrived.  For RETR/STOR/STOU it remains
+        // in "<filename>.part" so it is clearly marked as incomplete.  APPE
+        // writes directly to its destination, therefore its appended bytes
+        // are also intentionally kept.
+        finishTransfer(isTransferring, client_fd, ftpTransferAborted());
+        return;
+    }
+
+    if (!isAppend) {
+        fs::rename(writePath, destination, fileError);
+        if (fileError) {
+            fs::remove(writePath, fileError);
+            finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
+            return;
         }
     }
+
+    finishTransfer(isTransferring, client_fd, ftpTransferComplete());
 }
 
 void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, std::atomic_bool* isTransferring, std::atomic_bool* abortRequested, char transferMode,int client_fd) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         perror("Socket creation failed");
+        finishTransfer(isTransferring, client_fd, ftpCannotOpenDataConnection());
         return;
     }
 
@@ -211,14 +259,12 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, s
     if (!file.is_open()) {
         cerr << "Error opening file: " << filename << endl;
         close(sockfd);
+        finishTransfer(isTransferring, client_fd, ftpFileUnavailable());
         return;
     }
 
     char data_buffer[MAX_PAYLOAD_SIZE];
     uint32_t seq_num = 0;
-
-    if (isTransferring) isTransferring->store(true);
-    if (abortRequested) abortRequested->store(false);
 
     while (file.read(data_buffer, sizeof(data_buffer)) || file.gcount() > 0) {
         if ((abortRequested && abortRequested->load()) || (isTransferring && !isTransferring->load())) {
@@ -296,15 +342,12 @@ void rdtSendFile(string filename, sockaddr_in server_addr, socklen_t addr_len, s
         sendto(sockfd, &fin_hdr, sizeof(RDTHeader), 0, (struct sockaddr*)&server_addr, addr_len);
     }
 
-    if (isTransferring) isTransferring->store(false);
     file.close();
     close(sockfd);
 
-    if (client_fd >= 0) {
-        if (abortRequested && abortRequested->load()) {
-            sendAll(client_fd, ftpTransferAborted());
-        } else {
-            sendAll(client_fd, ftpTransferComplete());
-        }
-    }
+    finishTransfer(
+        isTransferring,
+        client_fd,
+        wasAborted(abortRequested) ? ftpTransferAborted() : ftpTransferComplete()
+    );
 }
