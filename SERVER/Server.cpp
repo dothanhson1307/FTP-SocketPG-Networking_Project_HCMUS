@@ -28,9 +28,10 @@ void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddr
         clientIp,
         sizeof(clientIp)
     );
+    int clientPort = ntohs(clientAddress.sin_port);
 
     std::cout << "[Server] Client connected: "
-              << clientIp << "\n";
+              << clientIp << ":" << clientPort << "\n";
 
     if (!sendAll(clientFd, ftpServiceReady())) {
         close(clientFd);
@@ -54,12 +55,11 @@ void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddr
         );
 
         if (received == 0) {
-            std::cout << "[Server] Client disconnected.\n";
             break;
         }
 
         if (received < 0) {
-            std::cerr << "[Server] recv failed.\n";
+            std::cerr << "[Server] recv failed for " << clientIp << ":" << clientPort << "\n";
             break;
         }
 
@@ -86,8 +86,12 @@ void handleNewClient(int clientFd,sockaddr_in clientAddress,socklen_t clientAddr
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
+    std::cout << "[Server] Client disconnected: "
+              << clientIp << ":" << clientPort << "\n";
+
     close(clientFd);
 }
+
 
 int main() {
     int serverFd = socket(AF_INET, SOCK_STREAM, 0);
