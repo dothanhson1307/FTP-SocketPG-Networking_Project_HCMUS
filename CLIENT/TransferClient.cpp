@@ -143,7 +143,10 @@ bool handleTransferCommand(
             return true;
         }
 
-        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+        if (session.isPassiveMode || session.dataPort < 0) {
+            ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+        }
+
 
         //send command for server to handle
         if (!sendAll(clientFd, rawLine + "\r\n")) {
@@ -203,7 +206,10 @@ bool handleTransferCommand(
             return true;
         }
 
-        ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+        if (session.isPassiveMode || session.dataPort < 0) {
+            ensurePassiveDataChannel(clientFd, pendingData, const_cast<ClientSession&>(session));
+        }
+
 
         if (!sendAll(clientFd, rawLine + "\r\n")) {
             std::cerr << "[Client] Send failed.\n";

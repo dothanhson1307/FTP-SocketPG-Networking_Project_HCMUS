@@ -78,8 +78,31 @@ void updateSessionAfterReply(
                 session.isPassiveMode = true;
             }
         }
+        return;
+    }
+
+    if (commandName == "PORT" && startsWithReplyCode(response, "200") && arguments.size() == 2) {
+        string csv = arguments[1];
+        std::stringstream ss(csv);
+        string token;
+        std::vector<int> parts;
+
+        while (std::getline(ss, token, ',')) {
+            try {
+                parts.push_back(std::stoi(token));
+            } catch (...) {
+                break;
+            }
+        }
+
+        if (parts.size() == 6) {
+            session.dataPort = parts[4] * 256 + parts[5];
+            session.isPassiveMode = false;
+        }
+        return;
     }
 }
+
 
 bool receiveLine(
     int socketFd,
