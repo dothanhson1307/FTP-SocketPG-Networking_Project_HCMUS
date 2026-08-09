@@ -4,6 +4,7 @@
 #include "Command/Integrity/Hash.h"
 #include "Server/Server.h"
 #include "Helper/FtpReply.h"
+#include "Helper/PathHelper.h"
 #include "Helper/SocketIO.h"
 
 #include <thread>
@@ -138,11 +139,15 @@ void handleStor(const std::vector<string>& args, ServerSession& session) {
 
         std::filesystem::path filename = std::filesystem::path(args[1]).filename();
         storedFilename = filename.string();
-        fullPath = session.homeDir / session.currentDir / filename;
 
         listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
         mode = session.transferMode;
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));
+    }
+
+    if (!resolvePathInsideHome(session, args[1], fullPath)) {
+        sendAll(session.clientFd, ftpFileUnavailable());
+        return;
     }
 
     if (!beginTransfer(session)) {
@@ -249,34 +254,39 @@ void handleStou(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
+    if (!isLoggedIn(session)) {
+        sendAll(session.clientFd, ftpNotLoggedIn());
+        return;
+    }
+
     std::filesystem::path fullPath;
     int listenPort = 8081;
     char clientIp[INET_ADDRSTRLEN]{};
     char mode = 'S';
-    string uniqueFilename;
+    string baseName = (args.size() == 2) ? std::filesystem::path(args[1]).stem().string() : "upload";
+    string ext = (args.size() == 2) ? std::filesystem::path(args[1]).extension().string() : ".tmp";
+    if (ext.empty()) {
+        ext = ".tmp";
+    }
 
-    {
-        std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
-        if (!isLoggedIn(session)) {
-            sendAll(session.clientFd, ftpNotLoggedIn());
+    string uniqueFilename = baseName + ext;
+    int counter = 1;
+    while (true) {
+        if (!resolvePathInsideHome(session, uniqueFilename, fullPath)) {
+            sendAll(session.clientFd, ftpFileUnavailable());
             return;
         }
 
-        string baseName = (args.size() == 2) ? std::filesystem::path(args[1]).stem().string() : "upload";
-        string ext = (args.size() == 2) ? std::filesystem::path(args[1]).extension().string() : ".tmp";
-        if (ext.empty()) ext = ".tmp";
-
-        uniqueFilename = baseName + ext;
-        std::filesystem::path candidatePath = session.homeDir / session.currentDir / uniqueFilename;
-        int counter = 1;
-
-        while (std::filesystem::exists(candidatePath)) {
-            uniqueFilename = baseName + "_" + std::to_string(counter) + ext;
-            candidatePath = session.homeDir / session.currentDir / uniqueFilename;
-            counter++;
+        if (!std::filesystem::exists(fullPath)) {
+            break;
         }
 
-        fullPath = candidatePath;
+        uniqueFilename = baseName + "_" + std::to_string(counter) + ext;
+        counter++;
+    }
+
+    {
+        std::shared_lock<std::shared_mutex> lock(session.sessionMutex);
         listenPort = (session.dataPort > 0) ? session.dataPort : 8081;
         mode = session.transferMode;
         inet_ntop(AF_INET, &session.clientAddress.sin_addr, clientIp, sizeof(clientIp));

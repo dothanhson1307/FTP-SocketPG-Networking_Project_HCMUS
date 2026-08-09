@@ -2,6 +2,7 @@
 
 #include "Command/Integrity/Hash.h"
 #include "Helper/FtpReply.h"
+#include "Helper/PathHelper.h"
 #include "Helper/SocketIO.h"
 
 #include <filesystem>
@@ -35,13 +36,17 @@ void handleHash(const std::vector<string>& args, ServerSession& session) {
             retrSourceHash = cachedHash->second;
         }
 
-        fullPath = session.homeDir / session.currentDir / filename;
     }
 
     // A successful RETR stores the source hash because that source lives in
     // Downloadable_files, outside the normal user home directory.
     if (!retrSourceHash.empty()) {
         sendAll(session.clientFd, "213 RETR-PRE " + retrSourceHash + "\r\n");
+        return;
+    }
+
+    if (!resolvePathInsideHome(session, args[1], fullPath)) {
+        sendAll(session.clientFd, ftpFileUnavailable());
         return;
     }
 

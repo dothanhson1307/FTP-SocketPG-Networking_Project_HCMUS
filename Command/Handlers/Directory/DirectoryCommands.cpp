@@ -1,6 +1,7 @@
 #include "DirectoryCommands.h"
 
 #include "Helper/FtpReply.h"
+#include "Helper/PathHelper.h"
 #include "Helper/SocketIO.h"
 
 #include <filesystem>
@@ -36,18 +37,11 @@ void handleCwd(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    std::filesystem::path target = args[1];
-    std::filesystem::path newCurrent = session.currentDir;
-
-    if (target.is_absolute()) {
-        newCurrent = target.relative_path();
-    } else {
-        newCurrent /= target;
+    std::filesystem::path resolvedPath;
+    if (!resolvePathInsideHome(session, args[1], resolvedPath)) {
+        sendAll(session.clientFd, ftpDirectoryDoesNotExist());
+        return;
     }
-
-    newCurrent = newCurrent.lexically_normal();
-
-    std::filesystem::path resolvedPath = session.homeDir / newCurrent;
 
     std::error_code error;
     if (!std::filesystem::is_directory(resolvedPath, error) || error) {
@@ -55,8 +49,8 @@ void handleCwd(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    auto relative = std::filesystem::relative(resolvedPath, session.homeDir, error);
-    if (error || relative.empty() || relative.string().find("..") == 0) {
+    const auto relative = resolvedPath.lexically_relative(session.homeDir);
+    if (relative.empty()) {
         sendAll(session.clientFd, ftpDirectoryDoesNotExist());
         return;
     }
@@ -76,7 +70,11 @@ void handleMkd(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    std::filesystem::path newDir = session.homeDir / session.currentDir / args[1];
+    std::filesystem::path newDir;
+    if (!resolvePathInsideHome(session, args[1], newDir)) {
+        sendAll(session.clientFd, ftpCannotCreateDirectory());
+        return;
+    }
 
     std::error_code error;
     if (!std::filesystem::create_directory(newDir, error) || error) {
@@ -98,7 +96,11 @@ void handleRmd(const std::vector<string>& args, ServerSession& session) {
         return;
     }
 
-    std::filesystem::path targetDir = session.homeDir / session.currentDir / args[1];
+    std::filesystem::path targetDir;
+    if (!resolvePathInsideHome(session, args[1], targetDir)) {
+        sendAll(session.clientFd, ftpDirectoryDoesNotExist());
+        return;
+    }
 
     std::error_code error;
     if (!std::filesystem::is_directory(targetDir, error) || error) {
