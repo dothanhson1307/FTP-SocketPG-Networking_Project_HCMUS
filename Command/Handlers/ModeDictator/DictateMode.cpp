@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <mutex>
 
 namespace {
 
