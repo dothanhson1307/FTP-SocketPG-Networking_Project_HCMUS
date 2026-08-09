@@ -118,6 +118,21 @@ bool handleTransferCommand(
         );
     }
 
+    if (commandName == "ABOR") {
+        // The client has its own RDT thread.  Stop it as well as asking the
+        // server to stop its thread; otherwise a receiver keeps waiting or a
+        // sender keeps retrying packets after the server has aborted.
+        if (arguments.size() == 1) {
+            ClientSession& mutableSession = const_cast<ClientSession&>(session);
+            if (mutableSession.isTransferring.load()) {
+                mutableSession.abortRequested.store(true);
+            }
+        }
+
+        // Let Client.cpp send ABOR and wait for the server's final reply.
+        return false;
+    }
+
     if (commandName == "RETR") {
         if (arguments.size() != 2) {
             return false;
@@ -159,6 +174,9 @@ bool handleTransferCommand(
         int port = session.dataPort;
         string ip = string(serverIp);
         char mode = session.transferMode;
+
+        mutableSession.abortRequested.store(false);
+        mutableSession.isTransferring.store(true);
 
         std::thread([savePath, port, ip, mode, &mutableSession]() {
             rdtReceiveFile(savePath.string(), port, ip, false, &mutableSession.isTransferring, &mutableSession.abortRequested, mode);
@@ -209,6 +227,9 @@ bool handleTransferCommand(
 
         ClientSession& mutableSession = const_cast<ClientSession&>(session);
         char mode = session.transferMode;
+
+        mutableSession.abortRequested.store(false);
+        mutableSession.isTransferring.store(true);
 
         std::thread([uploadPath, serverUdpAddress, mode, &mutableSession]() {
             rdtSendFile(
