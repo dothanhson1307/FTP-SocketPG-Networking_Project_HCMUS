@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 using std::string;
@@ -18,45 +19,61 @@ using std::string;
 namespace {
 
 //split commands into tokens for processing
-std::vector<string> parseLineTokens(const string& line) {
-    std::istringstream stream(line);
-    std::vector<string> tokens;
-    string token;
+std::vector<string> parseCommandTokens(const string& rawLine) {
+    std::istringstream stream(rawLine);
+    std::vector<string> arguments;
+    string argumentToken;
 
-    while (stream >> token) {
-        tokens.push_back(token);
+    while (stream >> argumentToken) {
+        arguments.push_back(argumentToken);
     }
 
-    return tokens;
+    return arguments;
 }
 
-bool startsWithCode(const string& response, const string& code) {
-    //rfind searches backwards
-    return response.rfind(code, 0) == 0;
+bool startsWithCode(const string& responseLine, const string& replyCode) {
+    return responseLine.rfind(replyCode, 0) == 0;
 }
 
 bool receiveReplyLine(
-    int clientFd,
-    string& pendingData,
-    string& response
+    int socketFd,
+    string& pendingBuffer,
+    string& outputReply
 ) {
-    if (!receiveLine(clientFd, pendingData, response)) {
-        std::cerr << "[Client] Server closed the connection.\n";
-        return false;
-    }
+    while (true) {
+        size_t newlinePosition = pendingBuffer.find('\n');
 
-    std::cout << response;
-    return true;
+        if (newlinePosition != string::npos) {
+            outputReply = pendingBuffer.substr(0, newlinePosition + 1);
+            pendingBuffer.erase(0, newlinePosition + 1);
+            return true;
+        }
+
+        char buffer[CLIENT_BUFFER_SIZE];
+        ssize_t bytesRead = recv(socketFd, buffer, sizeof(buffer), 0);
+
+        if (bytesRead <= 0) {
+            return false;
+        }
+
+        pendingBuffer.append(buffer, static_cast<size_t>(bytesRead));
+    }
 }
 
 std::filesystem::path buildUserFilepath(
-
     const ClientSession& session,
     const string& rawFilename
 ) {
-    std::filesystem::path filename = std::filesystem::path(rawFilename).filename();
-    return std::filesystem::path("Repository/user_data") / session.username / filename;
+    std::filesystem::path filenamePath = std::filesystem::path(rawFilename).filename();
+
+    return std::filesystem::absolute(
+        std::filesystem::path("Repository/user_data")
+        / session.username
+        / filenamePath
+    );
 }
+
+} // anonymous namespace
 
 void ensurePassiveDataChannel(
     int clientFd,
@@ -71,14 +88,15 @@ void ensurePassiveDataChannel(
         return;
     }
 
-    string pasvResponse;
-    if (receiveLine(clientFd, pendingData, pasvResponse)) {
-        std::cout << pasvResponse;
-        updateSessionAfterReply("PASV", pasvResponse, session);
+    string response;
+    if (!receiveReplyLine(clientFd, pendingData, response)) {
+        return;
     }
-}
 
-} // namespace
+    std::cout << response;
+
+    updateSessionAfterReply("PASV", response, session);
+}
 
 
 bool handleTransferCommand(
@@ -88,7 +106,7 @@ bool handleTransferCommand(
     const ClientSession& session,
     const string& rawLine
 ) {
-    const std::vector<string> arguments = parseLineTokens(rawLine);
+    const std::vector<string> arguments = parseCommandTokens(rawLine);
     if (arguments.empty()) {
         return false;
     }
@@ -124,6 +142,8 @@ bool handleTransferCommand(
             return true;
         }
 
+        std::cout << response;
+
         if (!startsWithCode(response, "125") && !startsWithCode(response, "150")) {
             return true;
         }
@@ -135,9 +155,15 @@ bool handleTransferCommand(
         char serverIp[INET_ADDRSTRLEN]{};
         inet_ntop(AF_INET, &serverAddress.sin_addr, serverIp, sizeof(serverIp));
 
-        rdtReceiveFile(savePath.string(), session.dataPort, serverIp);
+        ClientSession& mutableSession = const_cast<ClientSession&>(session);
+        int port = session.dataPort;
+        string ip = string(serverIp);
+        char mode = session.transferMode;
 
-        receiveReplyLine(clientFd, pendingData, response);
+        std::thread([savePath, port, ip, mode, &mutableSession]() {
+            rdtReceiveFile(savePath.string(), port, ip, false, &mutableSession.isTransferring, &mutableSession.abortRequested, mode);
+        }).detach();
+
         return true;
     }
 
@@ -172,6 +198,8 @@ bool handleTransferCommand(
             return true;
         }
 
+        std::cout << response;
+
         if (!startsWithCode(response, "125") && !startsWithCode(response, "150")) {
             return true;
         }
@@ -179,13 +207,20 @@ bool handleTransferCommand(
         sockaddr_in serverUdpAddress = serverAddress;
         serverUdpAddress.sin_port = htons(session.dataPort);
 
-        rdtSendFile(
-            uploadPath.string(),
-            serverUdpAddress,
-            sizeof(serverUdpAddress)
-        );
+        ClientSession& mutableSession = const_cast<ClientSession&>(session);
+        char mode = session.transferMode;
 
-        receiveReplyLine(clientFd, pendingData, response);
+        std::thread([uploadPath, serverUdpAddress, mode, &mutableSession]() {
+            rdtSendFile(
+                uploadPath.string(),
+                serverUdpAddress,
+                sizeof(serverUdpAddress),
+                &mutableSession.isTransferring,
+                &mutableSession.abortRequested,
+                mode
+            );
+        }).detach();
+
         return true;
     }
 

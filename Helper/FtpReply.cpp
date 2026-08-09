@@ -24,7 +24,7 @@ string ftpDirectoryDeleted() { return "250 Directory deleted successfully.\r\n";
 
 string ftpOpeningDataConnection(const string& command) { return "150 Opening UDP data connection for " + command + ".\r\n"; }
 string ftpCannotOpenDataConnection() { return "425 Cannot open data connection!\r\n"; }
-string ftpTransferAborted() { return "426 Connection closed; transfer aborted.\r\n"; }
+string ftpTransferAborted() { return "426 Transfer connection closed; transfer aborted.\r\n"; }
 string ftpTransferComplete() { return "226 Transfer complete.\r\n"; }
 string ftpTransferAlreadyInProgress() { return "450 Transfer already in progress.\r\n"; }
 

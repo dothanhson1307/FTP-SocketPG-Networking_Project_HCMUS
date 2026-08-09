@@ -45,8 +45,9 @@ void updateSessionAfterReply(
             session.usernameAccepted = true;
             session.loggedIn = false;
         } else {
-            session = ClientSession{};
+            session.reset();
         }
+
         return;
     }
 
