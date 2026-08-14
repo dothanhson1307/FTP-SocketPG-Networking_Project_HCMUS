@@ -21,8 +21,8 @@
 *.lib
 
 # Executables
-/server_app
-/client_app
+server_app
+client_app
 *.exe
 *.out
 *.app
@@ -30,6 +30,8 @@
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
+build/
+.build/
 
 # Temporary files
 *.tmp
@@ -52,12 +54,12 @@ Testing/
 .clangd
 compile_commands.json
 
-# Build files
-Makefile
-
 # OS Metadata
 .DS_Store
 *.DS_Store
 
 .agents/
-.build/
+
+# Large test files
+heavy.txt
+*.dat

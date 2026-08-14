@@ -32,7 +32,6 @@ int main(int argc, char* argv[]) {
     std::cout << "[Client] Connecting to server at " << serverIp << ":" << serverPort << "...\n";
 
     int clientFd = socket(AF_INET, SOCK_STREAM, 0);
-
     if (clientFd < 0) {
         std::cerr << "[Client] Cannot create socket.\n";
         return 1;
@@ -42,26 +41,15 @@ int main(int argc, char* argv[]) {
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(serverPort);
 
-    if (
-        inet_pton(
-            AF_INET,
-            serverIp.c_str(),
-            &serverAddress.sin_addr
-        ) <= 0
-    ) {
+    if (inet_pton(AF_INET, serverIp.c_str(), &serverAddress.sin_addr) <= 0) {
         std::cerr << "[Client] Invalid server IP: " << serverIp << "\n";
         close(clientFd);
         return 1;
     }
 
-    if (
-        connect(
-            clientFd,
-            reinterpret_cast<sockaddr*>(&serverAddress),
-            sizeof(serverAddress)
-        ) < 0
-    ) {
+    if (connect(clientFd, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) < 0) {
         std::cerr << "[Client] Cannot connect to server at " << serverIp << ":" << serverPort << ".\n";
+        std::cerr << "         Please ensure the server is running and reachable across your network.\n";
         close(clientFd);
         return 1;
     }
