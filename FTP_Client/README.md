@@ -1,23 +1,43 @@
 # Hybrid FTP - Client Package
 
-This directory contains the standalone Hybrid FTP Client. You can copy this entire `FTP_Client/` folder to another laptop (macOS / Linux) to connect to the server over Wi-Fi / LAN.
+This directory contains the standalone Hybrid FTP Client. You can copy this entire `FTP_Client/` folder to another laptop (Windows WSL Ubuntu / macOS / Linux) to connect to the server over Wi-Fi / LAN.
 
 ---
 
-## How to Connect to Server
+## 🪟 Windows Setup (via WSL Ubuntu)
 
-### 1. Build the Client
+If you are using **Windows with WSL (Ubuntu)**:
+
+### 1. Install Build Tools
+Open your WSL terminal and run:
+```bash
+sudo apt update && sudo apt install -y build-essential libssl-dev
+```
+
+### 2. Build the Client
 ```bash
 make clean
 make
 ```
 
-*(Prerequisites: C++17 compiler and OpenSSL: `sudo apt install libssl-dev` on Ubuntu/Debian or `brew install openssl@3` on macOS)*
-
-### 2. Run the Client
-Run the executable with the Server's IP address and Port:
-
+### 3. Connect to the Server
+Run the client with the server host laptop's IP address and Port:
 ```bash
+./client_app 10.122.2.63 80
+```
+
+---
+
+## 🍏 macOS / Linux Setup
+
+### 1. Prerequisites
+- **macOS**: `brew install openssl@3`
+- **Linux / Debian / Ubuntu**: `sudo apt install build-essential libssl-dev`
+
+### 2. Build & Run
+```bash
+make clean
+make
 ./client_app 10.122.2.63 80
 ```
 
@@ -27,7 +47,7 @@ Run the executable with the Server's IP address and Port:
 
 ---
 
-## Example Session
+## Example FTP Session
 
 ```
 $ ./client_app 10.122.2.63 80
